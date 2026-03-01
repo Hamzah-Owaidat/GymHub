@@ -28,10 +28,7 @@ app.use(morgan(logFormat));
 
 // API routes
 app.use('/', routes);
-// Mount future route modules here, e.g.:
-// app.use('/api/auth', require('./routes/auth'));
-// app.use('/api/users', require('./routes/users'));
-// app.use('/api/gyms', require('./routes/gyms'));
+app.use('/api/auth', require('./routes/auth'));
 
 // 404
 app.use((req, res, next) => {
