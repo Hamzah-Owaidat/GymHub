@@ -3,8 +3,8 @@
  * Sends consistent JSON error responses and logs in development.
  */
 function errorHandler(err, req, res, next) {
-  const statusCode = err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
+  const statusCode = err && (err.statusCode || err.status) || 500;
+  const message = err && (err.message || err.error) || 'Internal Server Error';
 
   if (process.env.ENVIRONMENT === 'development') {
     console.error('[Error]', err);

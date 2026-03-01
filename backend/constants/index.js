@@ -4,6 +4,7 @@
  */
 module.exports = {
   ...require('./roles'),
+  ...require('./permissions'),
   ...require('./days'),
   ...require('./subscriptionStatus'),
   ...require('./sessionStatus'),
