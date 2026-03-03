@@ -29,6 +29,7 @@ app.use(morgan(logFormat));
 // API routes
 app.use('/', routes);
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/dashboard', require('./routes/dashboard'));
 
 // 404
 app.use((req, res, next) => {
