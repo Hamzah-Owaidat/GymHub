@@ -42,6 +42,131 @@ async function findById(id) {
 }
 
 /**
+ * List users with pagination and optional filters.
+ * Filters:
+ *  - search: matches first_name, last_name, email, phone
+ *  - role_id
+ *  - is_active
+ */
+async function list({ search, role_id, is_active, page = 1, limit = 20, sortBy = 'created_at', sortDir = 'desc' } = {}) {
+  const allowedSort = new Set(['id', 'first_name', 'last_name', 'email', 'created_at']);
+  const sortColumn = allowedSort.has(sortBy) ? sortBy : 'created_at';
+  const direction = sortDir && sortDir.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+  const where = ['u.deleted_at IS NULL'];
+  const params = [];
+
+  if (search) {
+    const like = `%${search}%`;
+    where.push('(u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)');
+    params.push(like, like, like, like);
+  }
+  if (role_id) {
+    where.push('u.role_id = ?');
+    params.push(role_id);
+  }
+  if (typeof is_active === 'boolean') {
+    where.push('u.is_active = ?');
+    params.push(is_active ? 1 : 0);
+  }
+
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const offset = (Number(page) - 1) * Number(limit);
+
+  const countSql = `
+    SELECT COUNT(*) AS total
+    FROM users u
+    JOIN roles r ON r.id = u.role_id AND r.deleted_at IS NULL
+    ${whereSql}
+  `;
+  const [countRows] = await pool.query(countSql, params);
+  const total = countRows[0] ? countRows[0].total : 0;
+
+  const listSql = `
+    SELECT
+      u.id,
+      u.first_name,
+      u.last_name,
+      u.email,
+      u.dob,
+      u.phone,
+      u.profile_image,
+      u.is_active,
+      u.created_at,
+      r.name AS role,
+      r.id AS role_id
+    FROM users u
+    JOIN roles r ON r.id = u.role_id AND r.deleted_at IS NULL
+    ${whereSql}
+    ORDER BY u.${sortColumn} ${direction}
+    LIMIT ? OFFSET ?
+  `;
+
+  const [rows] = await pool.query(listSql, [...params, Number(limit), offset]);
+  const data = rows.map((row) => formatUserRow(row));
+
+  return {
+    data,
+    pagination: {
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      pages: Math.ceil(total / Number(limit)) || 0,
+    },
+  };
+}
+
+/**
+ * List all users (no pagination) – for exports.
+ */
+async function listAll({ search, role_id, is_active, sortBy = 'created_at', sortDir = 'desc' } = {}) {
+  const allowedSort = new Set(['id', 'first_name', 'last_name', 'email', 'created_at']);
+  const sortColumn = allowedSort.has(sortBy) ? sortBy : 'created_at';
+  const direction = sortDir && sortDir.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+  const where = ['u.deleted_at IS NULL'];
+  const params = [];
+
+  if (search) {
+    const like = `%${search}%`;
+    where.push('(u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)');
+    params.push(like, like, like, like);
+  }
+  if (role_id) {
+    where.push('u.role_id = ?');
+    params.push(role_id);
+  }
+  if (typeof is_active === 'boolean') {
+    where.push('u.is_active = ?');
+    params.push(is_active ? 1 : 0);
+  }
+
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  const sql = `
+    SELECT
+      u.id,
+      u.first_name,
+      u.last_name,
+      u.email,
+      u.dob,
+      u.phone,
+      u.profile_image,
+      u.is_active,
+      u.created_at,
+      r.name AS role,
+      r.id AS role_id
+    FROM users u
+    JOIN roles r ON r.id = u.role_id AND r.deleted_at IS NULL
+    ${whereSql}
+    ORDER BY u.${sortColumn} ${direction}
+  `;
+
+  const [rows] = await pool.query(sql, params);
+  return rows.map((row) => formatUserRow(row));
+}
+
+/**
  * Create a user. Returns the new user id.
  * @param {object} data
  * @param {string} data.first_name
@@ -71,6 +196,73 @@ async function create(data) {
     [first_name, last_name, email, passwordHash, role_id, created_by, dob, phone]
   );
   return result.insertId;
+}
+
+/**
+ * Update user fields (no password change here).
+ * Accepts partial fields in `data`.
+ */
+async function update(id, data) {
+  const fields = [];
+  const params = [];
+
+  if (data.first_name !== undefined) {
+    fields.push('first_name = ?');
+    params.push(data.first_name);
+  }
+  if (data.last_name !== undefined) {
+    fields.push('last_name = ?');
+    params.push(data.last_name);
+  }
+  if (data.email !== undefined) {
+    fields.push('email = ?');
+    params.push(data.email);
+  }
+  if (data.role_id !== undefined) {
+    fields.push('role_id = ?');
+    params.push(data.role_id);
+  }
+  if (data.dob !== undefined) {
+    fields.push('dob = ?');
+    params.push(data.dob);
+  }
+  if (data.phone !== undefined) {
+    fields.push('phone = ?');
+    params.push(data.phone);
+  }
+  if (data.is_active !== undefined) {
+    fields.push('is_active = ?');
+    params.push(data.is_active ? 1 : 0);
+  }
+
+  if (!fields.length) return false;
+
+  params.push(id);
+
+  const [result] = await pool.query(
+    `
+      UPDATE users
+      SET ${fields.join(', ')}, updated_at = NOW()
+      WHERE id = ? AND deleted_at IS NULL
+    `,
+    params
+  );
+  return result.affectedRows > 0;
+}
+
+/**
+ * Soft delete user.
+ */
+async function softDelete(id) {
+  const [result] = await pool.query(
+    `
+      UPDATE users
+      SET deleted_at = NOW(), is_active = FALSE
+      WHERE id = ? AND deleted_at IS NULL
+    `,
+    [id]
+  );
+  return result.affectedRows > 0;
 }
 
 /**
@@ -120,7 +312,11 @@ function formatUserRow(row, includePassword = false) {
 module.exports = {
   findByEmail,
   findById,
+  list,
+  listAll,
   create,
   getRoleIdByName,
   existsByEmail,
+  update,
+  softDelete,
 };
