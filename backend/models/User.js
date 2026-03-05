@@ -1,7 +1,7 @@
 const { pool } = require('../config/db');
 
 const SELECT_USER_WITH_ROLE = `
-  SELECT u.id, u.first_name, u.last_name, u.email, u.dob, u.phone, u.profile_image, u.is_active, u.created_at,
+  SELECT u.id, u.first_name, u.last_name, u.email, u.dob, u.phone_country_code, u.phone, u.profile_image, u.is_active, u.created_at,
          r.name AS role, r.id AS role_id
   FROM users u
   JOIN roles r ON r.id = u.role_id AND r.deleted_at IS NULL
@@ -9,7 +9,7 @@ const SELECT_USER_WITH_ROLE = `
 `;
 
 const SELECT_USER_WITH_PASSWORD = `
-  SELECT u.id, u.first_name, u.last_name, u.email, u.password, u.dob, u.phone, u.profile_image, u.is_active,
+  SELECT u.id, u.first_name, u.last_name, u.email, u.password, u.dob, u.phone_country_code, u.phone, u.profile_image, u.is_active,
          r.name AS role, r.id AS role_id
   FROM users u
   JOIN roles r ON r.id = u.role_id AND r.deleted_at IS NULL
@@ -175,6 +175,7 @@ async function listAll({ search, role_id, is_active, sortBy = 'created_at', sort
  * @param {string} data.passwordHash
  * @param {number} data.role_id
  * @param {string|null} [data.dob]
+ * @param {string} [data.phone_country_code]
  * @param {string|null} [data.phone]
  * @param {number|null} [data.created_by]
  * @returns {Promise<number>} insertId
@@ -187,13 +188,14 @@ async function create(data) {
     passwordHash,
     role_id,
     dob = null,
-    phone = null,
+    phone_country_code = '',
+    phone = '',
     created_by = null,
   } = data;
   const [result] = await pool.query(
-    `INSERT INTO users (first_name, last_name, email, password, role_id, is_active, created_by, dob, phone)
-     VALUES (?, ?, ?, ?, ?, TRUE, ?, ?, ?)`,
-    [first_name, last_name, email, passwordHash, role_id, created_by, dob, phone]
+    `INSERT INTO users (first_name, last_name, email, password, role_id, is_active, created_by, dob, phone_country_code, phone)
+     VALUES (?, ?, ?, ?, ?, TRUE, ?, ?, ?, ?)`,
+    [first_name, last_name, email, passwordHash, role_id, created_by, dob, phone_country_code, phone]
   );
   return result.insertId;
 }
@@ -298,6 +300,7 @@ function formatUserRow(row, includePassword = false) {
     last_name: row.last_name,
     email: row.email,
     dob: row.dob,
+    phone_country_code: row.phone_country_code,
     phone: row.phone,
     profile_image: row.profile_image,
     is_active: !!row.is_active,

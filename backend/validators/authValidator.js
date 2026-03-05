@@ -17,7 +17,18 @@ const registerRules = [
   body('email').trim().isEmail().withMessage('Valid email is required').normalizeEmail().isLength({ max: 120 }),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   body('dob').optional().isISO8601().withMessage('Invalid date format for dob'),
-  body('phone').optional().trim().isLength({ max: 30 }).withMessage('Phone too long'),
+  body('phone_country_code')
+    .trim()
+    .notEmpty()
+    .withMessage('Country code is required')
+    .isLength({ max: 10 })
+    .withMessage('Country code too long'),
+  body('phone')
+    .trim()
+    .notEmpty()
+    .withMessage('Phone is required')
+    .isLength({ max: 30 })
+    .withMessage('Phone too long'),
 ];
 
 const loginRules = [

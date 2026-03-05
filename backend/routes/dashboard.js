@@ -1,8 +1,30 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { requireAuth, requireAdmin } = require('../middleware');
 const roleController = require('../controllers/web/dashboard/roleController');
 const permissionController = require('../controllers/web/dashboard/permissionController');
 const userController = require('../controllers/web/dashboard/userController');
+const gymController = require('../controllers/web/dashboard/gymController');
+
+const tmpUploadDir = path.join(__dirname, '..', 'public', 'storage', 'tmp');
+if (!fs.existsSync(tmpUploadDir)) {
+  fs.mkdirSync(tmpUploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination(req, file, cb) {
+    cb(null, tmpUploadDir);
+  },
+  filename(req, file, cb) {
+    const ext = path.extname(file.originalname || '');
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    cb(null, unique);
+  },
+});
+
+const upload = multer({ storage });
 
 const router = express.Router();
 
@@ -32,6 +54,14 @@ router.get('/users/:id', userController.getById);
 router.post('/users', userController.create);
 router.put('/users/:id', userController.update);
 router.delete('/users/:id', userController.remove);
+
+// Gyms CRUD + images + coaches
+router.get('/gyms', gymController.list);
+router.get('/gyms/export', gymController.exportExcel);
+router.get('/gyms/:id', gymController.getById);
+router.post('/gyms', upload.array('images', 5), gymController.create);
+router.put('/gyms/:id', upload.array('images', 5), gymController.update);
+router.delete('/gyms/:id', gymController.remove);
 
 module.exports = router;
 

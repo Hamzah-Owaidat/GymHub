@@ -10,6 +10,10 @@ const mysql = require('mysql2/promise');
 
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 
+// Optional: pass a starting prefix, e.g. `node database/run-migrations.js 016`
+// to run only migrations whose filename is >= "016".
+const START_FROM_PREFIX = process.argv[2] || null;
+
 async function run() {
   const config = {
     host: process.env.DB_HOST || 'localhost',
@@ -31,9 +35,14 @@ async function run() {
 
     await conn.changeUser({ database: process.env.DB_NAME || 'gymhub' });
 
-    const files = fs.readdirSync(MIGRATIONS_DIR)
+    let files = fs.readdirSync(MIGRATIONS_DIR)
       .filter((f) => f.endsWith('.sql') && f !== '000_create_database.sql')
       .sort();
+
+    if (START_FROM_PREFIX) {
+      files = files.filter((f) => f >= START_FROM_PREFIX);
+      console.log('Running migrations starting from:', START_FROM_PREFIX);
+    }
 
     for (const file of files) {
       const filePath = path.join(MIGRATIONS_DIR, file);

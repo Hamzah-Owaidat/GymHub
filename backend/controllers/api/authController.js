@@ -10,7 +10,7 @@ const AppError = require('../../utils/AppError');
 
 async function register(req, res, next) {
   try {
-    const { first_name, last_name, email, password, dob, phone } = req.body;
+    const { first_name, last_name, email, password, dob, phone, phone_country_code } = req.body;
 
     const roleId = await User.getRoleIdByName('user');
     if (!roleId) return next(new AppError('User role not found', 500));
@@ -26,7 +26,8 @@ async function register(req, res, next) {
       passwordHash,
       role_id: roleId,
       dob: dob || null,
-      phone: phone || null,
+      phone,
+      phone_country_code: phone_country_code || '',
     });
 
     const user = await User.findById(userId);

@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -21,6 +22,9 @@ app.use(
 // Body parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Static files (gym images, etc.)
+app.use('/storage', express.static(path.join(__dirname, 'public', 'storage')));
 
 // Logging
 const logFormat = process.env.ENVIRONMENT === 'production' ? 'combined' : 'dev';
