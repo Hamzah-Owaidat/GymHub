@@ -7,6 +7,7 @@ export type AuthUser = {
   last_name?: string;
   role?: string;
   role_id?: number;
+  profile_image?: string | null;
 };
 
 export type LoginResponse = {

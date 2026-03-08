@@ -26,38 +26,39 @@ type NavItem = {
   subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
 };
 
+const D = "/dashboard";
+
 const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
     name: "Dashboard",
-    subItems: [{ name: "Ecommerce", path: "/", pro: false }],
+    subItems: [{ name: "Ecommerce", path: D, pro: false }],
   },
   {
     icon: <CalenderIcon />,
     name: "Calendar",
-    path: "/calendar",
+    path: `${D}/calendar`,
   },
   {
     icon: <UserCircleIcon />,
     name: "User Profile",
-    path: "/profile",
+    path: `${D}/profile`,
   },
-
   {
     name: "Forms",
     icon: <ListIcon />,
-    subItems: [{ name: "Form Elements", path: "/form-elements", pro: false }],
+    subItems: [{ name: "Form Elements", path: `${D}/form-elements`, pro: false }],
   },
   {
     name: "Tables",
     icon: <TableIcon />,
-    subItems: [{ name: "Basic Tables", path: "/basic-tables", pro: false }],
+    subItems: [{ name: "Basic Tables", path: `${D}/basic-tables`, pro: false }],
   },
   {
     name: "Pages",
     icon: <PageIcon />,
     subItems: [
-      { name: "Blank Page", path: "/blank", pro: false },
+      { name: "Blank Page", path: `${D}/blank`, pro: false },
       { name: "404 Error", path: "/error-404", pro: false },
     ],
   },
@@ -68,20 +69,20 @@ const othersItems: NavItem[] = [
     icon: <PieChartIcon />,
     name: "Charts",
     subItems: [
-      { name: "Line Chart", path: "/line-chart", pro: false },
-      { name: "Bar Chart", path: "/bar-chart", pro: false },
+      { name: "Line Chart", path: `${D}/line-chart`, pro: false },
+      { name: "Bar Chart", path: `${D}/bar-chart`, pro: false },
     ],
   },
   {
     icon: <BoxCubeIcon />,
     name: "UI Elements",
     subItems: [
-      { name: "Alerts", path: "/alerts", pro: false },
-      { name: "Avatar", path: "/avatars", pro: false },
-      { name: "Badge", path: "/badge", pro: false },
-      { name: "Buttons", path: "/buttons", pro: false },
-      { name: "Images", path: "/images", pro: false },
-      { name: "Videos", path: "/videos", pro: false },
+      { name: "Alerts", path: `${D}/alerts`, pro: false },
+      { name: "Avatar", path: `${D}/avatars`, pro: false },
+      { name: "Badge", path: `${D}/badge`, pro: false },
+      { name: "Buttons", path: `${D}/buttons`, pro: false },
+      { name: "Images", path: `${D}/images`, pro: false },
+      { name: "Videos", path: `${D}/videos`, pro: false },
     ],
   },
   {
@@ -308,7 +309,7 @@ const AppSidebar: React.FC = () => {
           !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
         }`}
       >
-        <Link href="/">
+        <Link href="/dashboard">
           {isExpanded || isHovered || isMobileOpen ? (
             <>
               <Image

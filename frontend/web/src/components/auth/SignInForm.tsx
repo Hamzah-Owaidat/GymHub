@@ -136,12 +136,6 @@ export default function SignInForm() {
               </div>
             </form>
 
-            {error && (
-              <p className="mt-3 text-sm text-orange-500 dark:text-yellow-300">
-                {error}
-              </p>
-            )}
-
             <div className="mt-5">
               <p className="text-sm font-normal text-center text-neutral-900 dark:text-gray-100 sm:text-start">
                 Don&apos;t have an account? {""}
