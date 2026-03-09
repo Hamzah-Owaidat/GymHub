@@ -112,6 +112,10 @@ async function listAll({
       g.name,
       g.description,
       g.location,
+      g.working_hours,
+      g.working_days,
+      g.phone,
+      g.email,
       g.owner_id,
       g.rating_average,
       g.rating_count,
@@ -135,6 +139,10 @@ async function findById(id) {
         g.name,
         g.description,
         g.location,
+        g.working_hours,
+        g.working_days,
+        g.phone,
+        g.email,
         g.owner_id,
         g.rating_average,
         g.rating_count,
@@ -150,18 +158,38 @@ async function findById(id) {
   return rows[0] || null;
 }
 
-async function create({ name, description = null, location = null, owner_id, is_active = true }) {
+async function create({
+  name,
+  description = null,
+  location = null,
+  working_hours = null,
+  working_days = null,
+  phone = null,
+  email = null,
+  owner_id,
+  is_active = true,
+}) {
   const [result] = await pool.query(
     `
-      INSERT INTO gyms (name, description, location, owner_id, is_active)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO gyms (name, description, location, working_hours, working_days, phone, email, owner_id, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
-    [name, description, location, owner_id, is_active ? 1 : 0]
+    [name, description, location, working_hours, working_days, phone, email, owner_id, is_active ? 1 : 0]
   );
   return result.insertId;
 }
 
-async function update(id, { name, description, location, owner_id, is_active }) {
+async function update(id, {
+  name,
+  description,
+  location,
+  working_hours,
+  working_days,
+  phone,
+  email,
+  owner_id,
+  is_active,
+}) {
   const fields = [];
   const params = [];
 
@@ -176,6 +204,22 @@ async function update(id, { name, description, location, owner_id, is_active }) 
   if (location !== undefined) {
     fields.push('location = ?');
     params.push(location);
+  }
+  if (working_hours !== undefined) {
+    fields.push('working_hours = ?');
+    params.push(working_hours);
+  }
+  if (working_days !== undefined) {
+    fields.push('working_days = ?');
+    params.push(working_days);
+  }
+  if (phone !== undefined) {
+    fields.push('phone = ?');
+    params.push(phone);
+  }
+  if (email !== undefined) {
+    fields.push('email = ?');
+    params.push(email);
   }
   if (owner_id !== undefined) {
     fields.push('owner_id = ?');

@@ -4,7 +4,9 @@ const path = require('path');
 const Gym = require('../../../models/Gym');
 const AppError = require('../../../utils/AppError');
 
-const STORAGE_BASE_DIR = path.join(__dirname, '..', '..', '..', 'public', 'storage');
+// Base directory for gym images:
+// backend/public/storage/gym/<gymIndex>/<1..5>/<filename>
+const STORAGE_BASE_DIR = path.join(__dirname, '..', '..', '..', 'public', 'storage', 'gym');
 
 function parseListQuery(query) {
   const page = Number(query.page) || 1;
@@ -61,7 +63,7 @@ function moveImagesToStorage(files, folderIndex) {
 
     fs.renameSync(file.path, targetPath);
 
-    const url = `/storage/${effectiveIndex}/${imageFolderName}/${filename}`;
+    const url = `/storage/gym/${effectiveIndex}/${imageFolderName}/${filename}`;
     urls.push(url);
   });
 
@@ -118,6 +120,10 @@ async function create(req, res, next) {
       name,
       description,
       location,
+      working_hours,
+      working_days,
+      phone,
+      email,
       owner_id,
       is_active,
       coach_user_ids,
@@ -134,6 +140,10 @@ async function create(req, res, next) {
       name: name.trim(),
       description: description || null,
       location: location || null,
+      working_hours: working_hours || null,
+      working_days: working_days || null,
+      phone: phone || null,
+      email: email || null,
       owner_id: Number(owner_id),
       is_active: is_active !== undefined ? Boolean(is_active) : true,
     });
@@ -173,6 +183,10 @@ async function update(req, res, next) {
       name,
       description,
       location,
+      working_hours,
+      working_days,
+      phone,
+      email,
       owner_id,
       is_active,
       coach_user_ids,
@@ -182,6 +196,10 @@ async function update(req, res, next) {
     if (name !== undefined) data.name = String(name).trim();
     if (description !== undefined) data.description = description || null;
     if (location !== undefined) data.location = location || null;
+    if (working_hours !== undefined) data.working_hours = working_hours || null;
+    if (working_days !== undefined) data.working_days = working_days || null;
+    if (phone !== undefined) data.phone = phone || null;
+    if (email !== undefined) data.email = email || null;
     if (owner_id !== undefined) data.owner_id = Number(owner_id);
     if (is_active !== undefined) data.is_active = Boolean(is_active);
 
@@ -196,8 +214,9 @@ async function update(req, res, next) {
       let folderIndex = null;
       if (existingImages.length && existingImages[0].image_url) {
         const parts = existingImages[0].image_url.split('/').filter(Boolean);
-        if (parts[0] === 'storage' && parts[1]) {
-          const parsed = parseInt(parts[1], 10);
+        // /storage/gym/<folderIndex>/<slot>/<filename>
+        if (parts[0] === 'storage' && parts[1] === 'gym' && parts[2]) {
+          const parsed = parseInt(parts[2], 10);
           if (!Number.isNaN(parsed)) folderIndex = parsed;
         }
       }

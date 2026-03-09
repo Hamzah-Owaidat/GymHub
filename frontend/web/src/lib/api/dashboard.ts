@@ -229,8 +229,15 @@ export async function exportUsers(params?: { search?: string; role_id?: number; 
 export type Gym = {
   id: number;
   name: string;
-  address: string | null;
   description: string | null;
+  location: string | null;
+  working_hours: string | null;
+  working_days: string | null;
+  phone: string | null;
+  email: string | null;
+  owner_id: number;
+  rating_average: number | null;
+  rating_count: number | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -264,12 +271,16 @@ export async function getGymById(id: number) {
 }
 
 export async function createGym(body: FormData) {
-  const res = await apiClient.post<{ success: boolean; gym: Gym }>(`${BASE}/gyms`, body);
+  const res = await apiClient.post<{ success: boolean; gym: Gym }>(`${BASE}/gyms`, body, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
   return res.data;
 }
 
 export async function updateGym(id: number, body: FormData) {
-  const res = await apiClient.put<{ success: boolean; gym: Gym }>(`${BASE}/gyms/${id}`, body);
+  const res = await apiClient.put<{ success: boolean; gym: Gym }>(`${BASE}/gyms/${id}`, body, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
   return res.data;
 }
 

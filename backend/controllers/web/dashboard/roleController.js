@@ -1,4 +1,5 @@
 const ExcelJS = require('exceljs');
+const { pool } = require('../../../config/db');
 const Role = require('../../../models/Role');
 const Permission = require('../../../models/Permission');
 const AppError = require('../../../utils/AppError');
@@ -123,6 +124,25 @@ async function remove(req, res, next) {
   try {
     const id = Number(req.params.id);
     if (!id) return next(new AppError('Invalid role id', 400));
+
+    // Prevent deleting roles that are currently assigned to users
+    const [rows] = await pool.query(
+      `
+        SELECT 1
+        FROM users u
+        WHERE u.role_id = ? AND u.deleted_at IS NULL
+        LIMIT 1
+      `,
+      [id],
+    );
+    if (rows.length) {
+      return next(
+        new AppError(
+          'Cannot delete a role that is assigned to one or more users.',
+          400,
+        ),
+      );
+    }
 
     const ok = await Role.softDelete(id);
     if (!ok) return next(new AppError('Role not found', 404));

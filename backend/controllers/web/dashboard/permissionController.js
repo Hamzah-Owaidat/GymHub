@@ -90,6 +90,25 @@ async function remove(req, res, next) {
     const id = Number(req.params.id);
     if (!id) return next(new AppError('Invalid permission id', 400));
 
+    // Prevent deleting permissions that are assigned to any role
+    const [rows] = await require('../../../config/db').pool.query(
+      `
+        SELECT 1
+        FROM role_permissions rp
+        WHERE rp.permission_id = ? AND rp.deleted_at IS NULL
+        LIMIT 1
+      `,
+      [id],
+    );
+    if (rows.length) {
+      return next(
+        new AppError(
+          'Cannot delete a permission that is assigned to one or more roles.',
+          400,
+        ),
+      );
+    }
+
     const ok = await Permission.softDelete(id);
     if (!ok) return next(new AppError('Permission not found', 404));
 
