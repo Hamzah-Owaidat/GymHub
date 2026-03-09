@@ -34,7 +34,7 @@ export default function ToastContainer() {
   if (!toasts.length) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-3 z-[9999] flex flex-col items-center space-y-2 sm:items-end sm:right-4 sm:left-auto">
+    <div className="pointer-events-none fixed inset-x-0 top-3 z-[100000] flex flex-col items-center space-y-2 sm:items-end sm:right-4 sm:left-auto">
       {toasts.map((toast) => {
         const styles = VARIANT_STYLES[toast.variant];
         return (

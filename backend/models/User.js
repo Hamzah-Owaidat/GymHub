@@ -89,6 +89,7 @@ async function list({ search, role_id, is_active, page = 1, limit = 20, sortBy =
       u.last_name,
       u.email,
       u.dob,
+      u.phone_country_code,
       u.phone,
       u.profile_image,
       u.is_active,
@@ -150,6 +151,7 @@ async function listAll({ search, role_id, is_active, sortBy = 'created_at', sort
       u.last_name,
       u.email,
       u.dob,
+      u.phone_country_code,
       u.phone,
       u.profile_image,
       u.is_active,
@@ -227,6 +229,10 @@ async function update(id, data) {
   if (data.dob !== undefined) {
     fields.push('dob = ?');
     params.push(data.dob);
+  }
+  if (data.phone_country_code !== undefined) {
+    fields.push('phone_country_code = ?');
+    params.push(data.phone_country_code);
   }
   if (data.phone !== undefined) {
     fields.push('phone = ?');
