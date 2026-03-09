@@ -11,6 +11,7 @@ import {
   GridIcon,
   HorizontaLDots,
   ListIcon,
+  LockIcon,
   PageIcon,
   PieChartIcon,
   PlugInIcon,
@@ -32,67 +33,34 @@ const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
     name: "Dashboard",
-    subItems: [{ name: "Ecommerce", path: D, pro: false }],
-  },
-  {
-    icon: <CalenderIcon />,
-    name: "Calendar",
-    path: `${D}/calendar`,
+    subItems: [{ name: "Overview", path: D, pro: false }],
   },
   {
     icon: <UserCircleIcon />,
-    name: "User Profile",
-    path: `${D}/profile`,
+    name: "Users",
+    path: `${D}/users`,
   },
   {
-    name: "Forms",
-    icon: <ListIcon />,
-    subItems: [{ name: "Form Elements", path: `${D}/form-elements`, pro: false }],
+    icon: <BoxCubeIcon />,
+    name: "Gyms",
+    path: `${D}/gyms`,
   },
-  {
-    name: "Tables",
-    icon: <TableIcon />,
-    subItems: [{ name: "Basic Tables", path: `${D}/basic-tables`, pro: false }],
-  },
-  {
-    name: "Pages",
-    icon: <PageIcon />,
-    subItems: [
-      { name: "Blank Page", path: `${D}/blank`, pro: false },
-      { name: "404 Error", path: "/error-404", pro: false },
-    ],
-  },
+  
+
 ];
 
 const othersItems: NavItem[] = [
   {
-    icon: <PieChartIcon />,
-    name: "Charts",
-    subItems: [
-      { name: "Line Chart", path: `${D}/line-chart`, pro: false },
-      { name: "Bar Chart", path: `${D}/bar-chart`, pro: false },
-    ],
+    icon: <LockIcon />,
+    name: "Roles",
+    path: `${D}/roles`,
   },
   {
-    icon: <BoxCubeIcon />,
-    name: "UI Elements",
-    subItems: [
-      { name: "Alerts", path: `${D}/alerts`, pro: false },
-      { name: "Avatar", path: `${D}/avatars`, pro: false },
-      { name: "Badge", path: `${D}/badge`, pro: false },
-      { name: "Buttons", path: `${D}/buttons`, pro: false },
-      { name: "Images", path: `${D}/images`, pro: false },
-      { name: "Videos", path: `${D}/videos`, pro: false },
-    ],
+    icon: <ListIcon />,
+    name: "Permissions",
+    path: `${D}/permissions`,
   },
-  {
-    icon: <PlugInIcon />,
-    name: "Authentication",
-    subItems: [
-      { name: "Sign In", path: "/signin", pro: false },
-      { name: "Sign Up", path: "/signup", pro: false },
-    ],
-  },
+  
 ];
 
 const AppSidebar: React.FC = () => {
@@ -349,7 +317,7 @@ const AppSidebar: React.FC = () => {
                 }`}
               >
                 {isExpanded || isHovered || isMobileOpen ? (
-                  "Menu"
+                  "Dashboards"
                 ) : (
                   <HorizontaLDots />
                 )}
@@ -366,7 +334,7 @@ const AppSidebar: React.FC = () => {
                 }`}
               >
                 {isExpanded || isHovered || isMobileOpen ? (
-                  "Others"
+                  "Security"
                 ) : (
                   <HorizontaLDots />
                 )}
@@ -375,7 +343,6 @@ const AppSidebar: React.FC = () => {
             </div>
           </div>
         </nav>
-        {isExpanded || isHovered || isMobileOpen ? <SidebarWidget /> : null}
       </div>
     </aside>
   );
