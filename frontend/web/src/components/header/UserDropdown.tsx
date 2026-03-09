@@ -1,24 +1,38 @@
-"use client";
+ "use client";
 import Image from "next/image";
 import Link from "next/link";
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
+import { useAuthStore } from "@/store/authStore";
 
-// Dummy hook for demonstration. Replace with your real authentication hook/context/provider.
-function useUser() {
-  // Replace this logic with your actual user fetching logic, such as from context or react-query, etc.
-  // Return null if not logged in.
-  return {
-    name: "Musharof Chowdhury",
-    email: "randomuser@pimjo.com",
-    avatar: "/images/user/owner.jpg",
-  };
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+
+function getProfileImageUrl(profileImage: string | null | undefined): string | null {
+  if (!profileImage?.trim()) return null;
+  if (profileImage.startsWith("http")) return profileImage;
+  const base = API_BASE.replace(/\/$/, "");
+  const path = profileImage.startsWith("/") ? profileImage : `/${profileImage}`;
+  return path.startsWith("/storage") ? `${base}${path}` : `${base}/storage/${profileImage.replace(/^\//, "")}`;
+}
+
+function getInitials(firstName?: string, lastName?: string): string {
+  const first = (firstName || "").trim();
+  const second = (lastName || "").trim();
+  const a = first.slice(0, 1).toUpperCase();
+  const b = second.slice(0, 1).toUpperCase();
+  if (a && b) return `${a}${b}`;
+  if (a) return a;
+  if (b) return b;
+  return "U";
 }
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
-  const user = useUser();
+  const router = useRouter();
+  const { user, clearAuth } = useAuthStore();
 
   function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
     e.stopPropagation();
@@ -30,10 +44,9 @@ export default function UserDropdown() {
   }
 
   if (!user) {
-    // Optionally render nothing or a login button
     return (
       <Link
-        href="/signin"
+        href="/auth/signin"
         className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
       >
         Sign in
@@ -41,21 +54,33 @@ export default function UserDropdown() {
     );
   }
 
+  const profileImageUrl = getProfileImageUrl(user.profile_image ?? null);
+  const initials = getInitials(user.first_name, user.last_name);
+  const displayName =
+    `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() || user.email;
+
   return (
     <div className="relative">
       <button
         onClick={toggleDropdown}
         className="flex items-center text-gray-700 dark:text-gray-400 dropdown-toggle"
       >
-        <span className="mr-3 overflow-hidden rounded-full h-11 w-11">
-          <Image
-            width={44}
-            height={44}
-            src={user.avatar || "/images/user/default.jpg"}
-            alt={user.name || "User"}
-          />
+        <span className="mr-3 overflow-hidden rounded-full h-11 w-11 bg-brand-500/10 flex items-center justify-center text-sm font-semibold text-brand-700 dark:bg-brand-500/20 dark:text-brand-300">
+          {profileImageUrl ? (
+            <Image
+              width={44}
+              height={44}
+              src={profileImageUrl}
+              alt={displayName || "User"}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            initials
+          )}
         </span>
-        <span className="block mr-1 font-medium text-theme-sm">{user.name?.split(" ")[0]}</span>
+        <span className="block mr-1 font-medium text-theme-sm">
+          {displayName.split(" ")[0]}
+        </span>
         <svg
           className={`stroke-gray-500 dark:stroke-gray-400 transition-transform duration-200 ${
             isOpen ? "rotate-180" : ""
@@ -82,7 +107,7 @@ export default function UserDropdown() {
       >
         <div>
           <span className="block font-medium text-gray-700 text-theme-sm dark:text-gray-400">
-            {user.name}
+            {displayName}
           </span>
           <span className="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">
             {user.email}
@@ -166,9 +191,14 @@ export default function UserDropdown() {
             </DropdownItem>
           </li>
         </ul>
-        <Link
-          href="/signin"
-          className="flex items-center gap-3 px-3 py-2 mt-3 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
+        <button
+          type="button"
+          onClick={() => {
+            closeDropdown();
+            clearAuth();
+            router.push("/auth/signin");
+          }}
+          className="flex w-full items-center gap-3 px-3 py-2 mt-3 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
         >
           <svg
             className="fill-gray-500 group-hover:fill-gray-700 dark:group-hover:fill-gray-300"
@@ -186,7 +216,7 @@ export default function UserDropdown() {
             />
           </svg>
           Sign out
-        </Link>
+        </button>
       </Dropdown>
     </div>
   );
