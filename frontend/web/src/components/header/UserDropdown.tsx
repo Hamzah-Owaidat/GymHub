@@ -1,7 +1,7 @@
- "use client";
+"use client";
 import Image from "next/image";
 import Link from "next/link";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
@@ -31,8 +31,13 @@ function getInitials(firstName?: string, lastName?: string): string {
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const { user, clearAuth } = useAuthStore();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
     e.stopPropagation();
@@ -41,6 +46,15 @@ export default function UserDropdown() {
 
   function closeDropdown() {
     setIsOpen(false);
+  }
+
+  // Avoid SSR/client mismatch by rendering a neutral placeholder until mounted.
+  if (!mounted) {
+    return (
+      <div className="flex items-center">
+        <span className="mr-3 h-11 w-11 rounded-full bg-gray-200/40 dark:bg-gray-700/40" />
+      </div>
+    );
   }
 
   if (!user) {

@@ -7,6 +7,8 @@ const roleController = require('../controllers/web/dashboard/roleController');
 const permissionController = require('../controllers/web/dashboard/permissionController');
 const userController = require('../controllers/web/dashboard/userController');
 const gymController = require('../controllers/web/dashboard/gymController');
+const subscriptionPlanController = require('../controllers/web/dashboard/subscriptionPlanController');
+const coachController = require('../controllers/web/dashboard/coachController');
 
 const tmpUploadDir = path.join(__dirname, '..', 'public', 'storage', 'tmp');
 if (!fs.existsSync(tmpUploadDir)) {
@@ -55,13 +57,29 @@ router.post('/users', userController.create);
 router.put('/users/:id', userController.update);
 router.delete('/users/:id', userController.remove);
 
-// Gyms CRUD + images + coaches
+// Gyms CRUD + images
 router.get('/gyms', gymController.list);
 router.get('/gyms/export', gymController.exportExcel);
 router.get('/gyms/:id', gymController.getById);
 router.post('/gyms', upload.array('images', 5), gymController.create);
 router.put('/gyms/:id', upload.array('images', 5), gymController.update);
 router.delete('/gyms/:id', gymController.remove);
+
+// Subscription plans CRUD + export
+router.get('/subscription-plans', subscriptionPlanController.list);
+router.get('/subscription-plans/export', subscriptionPlanController.exportExcel);
+router.get('/subscription-plans/:id', subscriptionPlanController.getById);
+router.post('/subscription-plans', subscriptionPlanController.create);
+router.put('/subscription-plans/:id', subscriptionPlanController.update);
+router.delete('/subscription-plans/:id', subscriptionPlanController.remove);
+
+// Coaches CRUD + export
+router.get('/coaches', coachController.list);
+router.get('/coaches/export', coachController.exportExcel);
+router.get('/coaches/:id', coachController.getById);
+router.post('/coaches', coachController.create);
+router.put('/coaches/:id', coachController.update);
+router.delete('/coaches/:id', coachController.remove);
 
 module.exports = router;
 

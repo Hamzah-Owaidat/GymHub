@@ -9,7 +9,7 @@ import { useToast } from "@/context/ToastContext";
 import { login } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 export default function SignInForm() {
   const [showPassword, setShowPassword] = useState(false);
@@ -21,8 +21,19 @@ export default function SignInForm() {
    const [emailError, setEmailError] = useState<string | null>(null);
    const [passwordError, setPasswordError] = useState<string | null>(null);
   const router = useRouter();
-  const { setAuth } = useAuthStore();
+  const { setAuth, isAuthenticated } = useAuthStore();
   const { error: showErrorToast, success: showSuccessToast } = useToast();
+
+  useEffect(() => {
+    // If there is already a token in localStorage or the store is authenticated,
+    // redirect away from the sign-in page to prevent duplicate login.
+    if (typeof window !== "undefined") {
+      const token = window.localStorage.getItem("gymhub_token");
+      if (token || isAuthenticated) {
+        router.replace("/");
+      }
+    }
+  }, [isAuthenticated, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

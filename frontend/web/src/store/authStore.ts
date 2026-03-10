@@ -18,30 +18,58 @@ type AuthState = {
   clearAuth: () => void;
 };
 
-export const useAuthStore = create<AuthState>()((set) => ({
-  user: null,
-  token: null,
-  isAuthenticated: false,
-  setAuth: ({ user, token }) => {
-    // Persist only the raw token as a plain string
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("gymhub_token", token);
+function getInitialAuthState(): Pick<AuthState, "user" | "token" | "isAuthenticated"> {
+  if (typeof window === "undefined") {
+    return { user: null, token: null, isAuthenticated: false };
+  }
+
+  const token = window.localStorage.getItem("gymhub_token");
+  const rawUser = window.localStorage.getItem("gymhub_user");
+
+  let user: AuthUser | null = null;
+  if (rawUser) {
+    try {
+      user = JSON.parse(rawUser) as AuthUser;
+    } catch {
+      user = null;
     }
-    set({
-      user,
-      token,
-      isAuthenticated: true,
-    });
-  },
-  clearAuth: () => {
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem("gymhub_token");
-    }
-    set({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-    });
-  },
-}));
+  }
+
+  return {
+    user,
+    token,
+    isAuthenticated: !!token && !!user,
+  };
+}
+
+export const useAuthStore = create<AuthState>()((set) => {
+  const initial = getInitialAuthState();
+
+  return {
+    ...initial,
+    setAuth: ({ user, token }) => {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("gymhub_token", token);
+        window.localStorage.setItem("gymhub_user", JSON.stringify(user));
+      }
+      set({
+        user,
+        token,
+        isAuthenticated: true,
+      });
+    },
+    clearAuth: () => {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem("gymhub_token");
+        window.localStorage.removeItem("gymhub_user");
+      }
+      set({
+        user: null,
+        token: null,
+        isAuthenticated: false,
+      });
+    },
+  };
+});
+
 

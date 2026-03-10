@@ -270,24 +270,36 @@ async function exportExcel(req, res, next) {
     sheet.columns = [
       { header: 'ID', key: 'id', width: 10 },
       { header: 'Name', key: 'name', width: 30 },
+      { header: 'Description', key: 'description', width: 40 },
       { header: 'Location', key: 'location', width: 30 },
+      { header: 'Working Hours', key: 'working_hours', width: 20 },
+      { header: 'Working Days', key: 'working_days', width: 20 },
+      { header: 'Phone', key: 'phone', width: 18 },
+      { header: 'Email', key: 'email', width: 28 },
       { header: 'Owner ID', key: 'owner_id', width: 10 },
       { header: 'Rating Avg', key: 'rating_average', width: 12 },
       { header: 'Rating Count', key: 'rating_count', width: 12 },
       { header: 'Active', key: 'is_active', width: 10 },
       { header: 'Created At', key: 'created_at', width: 24 },
+      { header: 'Updated At', key: 'updated_at', width: 24 },
     ];
 
     rows.forEach((row) => {
       sheet.addRow({
         id: row.id,
         name: row.name,
+        description: row.description || '',
         location: row.location || '',
+        working_hours: row.working_hours || '',
+        working_days: row.working_days || '',
+        phone: row.phone || '',
+        email: row.email || '',
         owner_id: row.owner_id,
         rating_average: row.rating_average,
         rating_count: row.rating_count,
         is_active: row.is_active ? 'Yes' : 'No',
         created_at: row.created_at,
+        updated_at: row.updated_at,
       });
     });
 

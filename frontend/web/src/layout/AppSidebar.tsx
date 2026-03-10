@@ -45,7 +45,16 @@ const navItems: NavItem[] = [
     name: "Gyms",
     path: `${D}/gyms`,
   },
-  
+  {
+    icon: <TableIcon />,
+    name: "Subscription Plans",
+    path: `${D}/subscription-plans`,
+  },
+  {
+    icon: <UserCircleIcon />,
+    name: "Coaches",
+    path: `${D}/coaches`,
+  },
 
 ];
 

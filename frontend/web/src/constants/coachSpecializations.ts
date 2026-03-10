@@ -1,0 +1,22 @@
+export const COACH_SPECIALIZATIONS: string[] = [
+  "Personal Trainer",
+  "Strength & Conditioning",
+  "Bodybuilding",
+  "Weight Loss",
+  "CrossFit",
+  "Functional Training",
+  "Cardio Training",
+  "Yoga",
+  "Pilates",
+  "Mobility & Flexibility",
+  "Rehabilitation",
+  "Physiotherapy",
+  "Boxing",
+  "Kickboxing",
+  "Martial Arts",
+  "Calisthenics",
+  "Powerlifting",
+  "Olympic Lifting",
+  "Nutrition Coaching",
+];
+
