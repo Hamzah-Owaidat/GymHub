@@ -1,6 +1,7 @@
 const SubscriptionPlan = require('../../../models/SubscriptionPlan');
 const AppError = require('../../../utils/AppError');
 const ExcelJS = require('exceljs');
+const notificationService = require('../../../services/notificationService');
 
 function parseListQuery(query) {
   const page = Number(query.page) || 1;
@@ -76,6 +77,18 @@ async function create(req, res, next) {
 
     const plan = await SubscriptionPlan.findById(id);
     res.status(201).json({ success: true, plan });
+
+    // Notify all users about the new subscription plan.
+    try {
+      await notificationService.sendAndBroadcastToAll({
+        title: 'New subscription plan',
+        message: `Plan "${plan.name}" for gym "${plan.gym_name}" has been created.`,
+        type: 'subscription',
+      });
+    } catch (notifyErr) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to send subscription plan create notification:', notifyErr);
+    }
   } catch (err) {
     next(err);
   }
@@ -110,6 +123,18 @@ async function update(req, res, next) {
     if (!plan) return next(new AppError('Subscription plan not found', 404));
 
     res.json({ success: true, plan });
+
+    // Notify all users about the updated subscription plan.
+    try {
+      await notificationService.sendAndBroadcastToAll({
+        title: 'Subscription plan updated',
+        message: `Plan "${plan.name}" for gym "${plan.gym_name}" has been updated.`,
+        type: 'subscription',
+      });
+    } catch (notifyErr) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to send subscription plan update notification:', notifyErr);
+    }
   } catch (err) {
     next(err);
   }
@@ -120,10 +145,25 @@ async function remove(req, res, next) {
     const id = Number(req.params.id);
     if (!id) return next(new AppError('Invalid subscription plan id', 400));
 
+    const plan = await SubscriptionPlan.findById(id);
+    if (!plan) return next(new AppError('Subscription plan not found', 404));
+    const planName = plan.name;
+    const gymName = plan.gym_name || '';
+
     const ok = await SubscriptionPlan.softDelete(id);
     if (!ok) return next(new AppError('Subscription plan not found', 404));
 
     res.json({ success: true, message: 'Subscription plan deleted' });
+
+    try {
+      await notificationService.sendAndBroadcastToAll({
+        title: 'Subscription plan deleted',
+        message: `Plan "${planName}"${gymName ? ` for gym "${gymName}"` : ''} has been deleted.`,
+        type: 'subscription',
+      });
+    } catch (notifyErr) {
+      console.error('Failed to send subscription plan delete notification:', notifyErr);
+    }
   } catch (err) {
     next(err);
   }

@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const Gym = require('../../../models/Gym');
 const AppError = require('../../../utils/AppError');
+const notificationService = require('../../../services/notificationService');
 
 // Base directory for gym images:
 // backend/public/storage/gym/<gymIndex>/<1..5>/<filename>
@@ -169,6 +170,19 @@ async function create(req, res, next) {
     ]);
 
     res.status(201).json({ success: true, gym, images, coaches });
+
+    // Notify all users about the new gym.
+    try {
+      await notificationService.sendAndBroadcastToAll({
+        title: 'New gym created',
+        message: `Gym "${gym.name}" has been created.`,
+        type: 'system',
+      });
+    } catch (notifyErr) {
+      // Notification failures should not break the main request.
+      // eslint-disable-next-line no-console
+      console.error('Failed to send gym create notification:', notifyErr);
+    }
   } catch (err) {
     next(err);
   }
@@ -240,6 +254,18 @@ async function update(req, res, next) {
     ]);
 
     res.json({ success: true, gym, images, coaches });
+
+    // Notify all users about the gym update.
+    try {
+      await notificationService.sendAndBroadcastToAll({
+        title: 'Gym updated',
+        message: `Gym "${gym.name}" has been updated.`,
+        type: 'system',
+      });
+    } catch (notifyErr) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to send gym update notification:', notifyErr);
+    }
   } catch (err) {
     next(err);
   }
@@ -250,10 +276,24 @@ async function remove(req, res, next) {
     const id = Number(req.params.id);
     if (!id) return next(new AppError('Invalid gym id', 400));
 
+    const gym = await Gym.findById(id);
+    if (!gym) return next(new AppError('Gym not found', 404));
+    const gymName = gym.name;
+
     const ok = await Gym.softDelete(id);
     if (!ok) return next(new AppError('Gym not found', 404));
 
     res.json({ success: true, message: 'Gym deleted' });
+
+    try {
+      await notificationService.sendAndBroadcastToAll({
+        title: 'Gym deleted',
+        message: `Gym "${gymName}" has been deleted.`,
+        type: 'system',
+      });
+    } catch (notifyErr) {
+      console.error('Failed to send gym delete notification:', notifyErr);
+    }
   } catch (err) {
     next(err);
   }

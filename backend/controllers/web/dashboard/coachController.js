@@ -1,6 +1,7 @@
 const Coach = require('../../../models/Coach');
 const AppError = require('../../../utils/AppError');
 const ExcelJS = require('exceljs');
+const notificationService = require('../../../services/notificationService');
 
 function parseListQuery(query) {
   const page = Number(query.page) || 1;
@@ -73,6 +74,18 @@ async function create(req, res, next) {
 
     const coach = await Coach.findById(id);
     res.status(201).json({ success: true, coach });
+
+    // Notify the coach privately that they have been assigned to a gym.
+    try {
+      await notificationService.sendAndBroadcastToUser(coach.user_id, {
+        title: 'New gym assignment',
+        message: `You have been assigned as a coach at gym "${coach.gym_name}".`,
+        type: 'system',
+      });
+    } catch (notifyErr) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to send coach assignment notification:', notifyErr);
+    }
   } catch (err) {
     next(err);
   }
@@ -122,10 +135,25 @@ async function remove(req, res, next) {
     const id = Number(req.params.id);
     if (!id) return next(new AppError('Invalid coach id', 400));
 
+    const coach = await Coach.findById(id);
+    if (!coach) return next(new AppError('Coach not found', 404));
+    const coachName = `${coach.user_first_name || ''} ${coach.user_last_name || ''}`.trim() || 'Coach';
+    const gymName = coach.gym_name || '';
+
     const ok = await Coach.softDelete(id);
     if (!ok) return next(new AppError('Coach not found', 404));
 
     res.json({ success: true, message: 'Coach deleted' });
+
+    try {
+      await notificationService.sendAndBroadcastToUser(coach.user_id, {
+        title: 'Coach assignment removed',
+        message: `${coachName}, your assignment at gym "${gymName}" has been removed.`,
+        type: 'system',
+      });
+    } catch (notifyErr) {
+      console.error('Failed to send coach delete notification:', notifyErr);
+    }
   } catch (err) {
     next(err);
   }
