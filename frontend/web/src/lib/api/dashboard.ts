@@ -5,4 +5,6 @@ export * from "./users";
 export * from "./gyms";
 export * from "./subscriptionPlans";
 export * from "./coaches";
+export * from "./sessions";
+export * from "./payments";
 export * from "./notifications";

@@ -9,6 +9,8 @@ const userController = require('../controllers/web/dashboard/userController');
 const gymController = require('../controllers/web/dashboard/gymController');
 const subscriptionPlanController = require('../controllers/web/dashboard/subscriptionPlanController');
 const coachController = require('../controllers/web/dashboard/coachController');
+const sessionController = require('../controllers/web/dashboard/sessionController');
+const paymentController = require('../controllers/web/dashboard/paymentController');
 
 const tmpUploadDir = path.join(__dirname, '..', 'public', 'storage', 'tmp');
 if (!fs.existsSync(tmpUploadDir)) {
@@ -80,6 +82,22 @@ router.get('/coaches/:id', coachController.getById);
 router.post('/coaches', coachController.create);
 router.put('/coaches/:id', coachController.update);
 router.delete('/coaches/:id', coachController.remove);
+
+// Sessions CRUD + export
+router.get('/sessions', sessionController.list);
+router.get('/sessions/export', sessionController.exportExcel);
+router.get('/sessions/:id', sessionController.getById);
+router.post('/sessions', sessionController.create);
+router.put('/sessions/:id', sessionController.update);
+router.delete('/sessions/:id', sessionController.remove);
+
+// Payments CRUD + export
+router.get('/payments', paymentController.list);
+router.get('/payments/export', paymentController.exportExcel);
+router.get('/payments/:id', paymentController.getById);
+router.post('/payments', paymentController.create);
+router.put('/payments/:id', paymentController.update);
+router.delete('/payments/:id', paymentController.remove);
 
 module.exports = router;
 

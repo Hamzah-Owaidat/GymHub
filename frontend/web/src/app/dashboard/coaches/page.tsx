@@ -19,11 +19,29 @@ import {
   getRoles,
   getUsers,
   type Coach,
+  type CoachAvailability,
   type Gym,
   type Role,
   type User,
 } from "@/lib/api/dashboard";
 import React, { useEffect, useState } from "react";
+
+const DAYS = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
+
+const HOURS = Array.from({ length: 24 }, (_, i) => {
+  const h = String(i).padStart(2, "0");
+  return `${h}:00`;
+});
+
+type AvailabilitySlot = { day: string; start_time: string; end_time: string };
 
 type CoachModalMode = "view" | "create" | "edit" | null;
 
@@ -128,6 +146,7 @@ export default function CoachesPage() {
     price_per_session: "",
     is_active: true,
   });
+  const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
 
   const resetForm = () => {
     setForm({
@@ -138,10 +157,26 @@ export default function CoachesPage() {
       price_per_session: "",
       is_active: true,
     });
+    setAvailabilitySlots([]);
+  };
+
+  const addSlot = () => {
+    setAvailabilitySlots((prev) => [...prev, { day: "monday", start_time: "08:00", end_time: "17:00" }]);
+  };
+
+  const removeSlot = (idx: number) => {
+    setAvailabilitySlots((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateSlot = (idx: number, field: keyof AvailabilitySlot, value: string) => {
+    setAvailabilitySlots((prev) =>
+      prev.map((s, i) => (i === idx ? { ...s, [field]: value } : s)),
+    );
   };
 
   const openCreateModal = () => {
     resetForm();
+    setAvailabilitySlots([]);
     setSelectedCoach(null);
     setModalMode("create");
   };
@@ -159,6 +194,13 @@ export default function CoachesPage() {
           : "",
       is_active: coach.is_active,
     });
+    setAvailabilitySlots(
+      (coach.availability || []).map((a) => ({
+        day: a.day,
+        start_time: a.start_time ? a.start_time.slice(0, 5) : "08:00",
+        end_time: a.end_time ? a.end_time.slice(0, 5) : "17:00",
+      })),
+    );
     setModalMode("edit");
   };
 
@@ -204,6 +246,11 @@ export default function CoachesPage() {
           ? Number(form.price_per_session)
           : undefined,
         is_active: form.is_active,
+        availability: availabilitySlots.map((s) => ({
+          day: s.day,
+          start_time: s.start_time || null,
+          end_time: s.end_time || null,
+        })),
       };
 
       if (modalMode === "create") {
@@ -377,6 +424,9 @@ export default function CoachesPage() {
                     Price / session
                   </th>
                   <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">
+                    Availability
+                  </th>
+                  <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">
                     Active
                   </th>
                   <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">
@@ -406,6 +456,30 @@ export default function CoachesPage() {
                     </td>
                     <td className="px-4 py-3 text-stone-600 dark:text-stone-300">
                       {row.price_per_session != null ? `$${formatPrice(row.price_per_session)}` : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-stone-600 dark:text-stone-300">
+                      {row.availability && row.availability.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {row.availability.slice(0, 3).map((a, i) => (
+                            <span
+                              key={i}
+                              className="inline-flex items-center rounded-md bg-brand-50 px-1.5 py-0.5 text-[10px] font-medium capitalize text-brand-600 dark:bg-brand-500/10 dark:text-brand-400"
+                            >
+                              {a.day.slice(0, 3)}
+                              {a.start_time && a.end_time
+                                ? ` ${a.start_time.slice(0, 5)}-${a.end_time.slice(0, 5)}`
+                                : ""}
+                            </span>
+                          ))}
+                          {row.availability.length > 3 && (
+                            <span className="text-[10px] text-stone-400">
+                              +{row.availability.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -526,6 +600,32 @@ export default function CoachesPage() {
                 </div>
                 <div>
                   <p className="mb-1 text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                    Availability
+                  </p>
+                  {selectedCoach.availability && selectedCoach.availability.length > 0 ? (
+                    <div className="mt-1 space-y-1.5">
+                      {selectedCoach.availability.map((a, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center gap-2 rounded-lg bg-stone-50 px-3 py-2 dark:bg-stone-800"
+                        >
+                          <span className="min-w-[80px] text-xs font-semibold capitalize text-brand-500">
+                            {a.day}
+                          </span>
+                          <span className="text-xs text-stone-600 dark:text-stone-300">
+                            {a.start_time && a.end_time
+                              ? `${a.start_time.slice(0, 5)} — ${a.end_time.slice(0, 5)}`
+                              : "All day"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-stone-900 dark:text-stone-50">—</p>
+                  )}
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">
                     Status
                   </p>
                   <span
@@ -612,6 +712,69 @@ export default function CoachesPage() {
                   onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))}
                   placeholder="Short bio"
                 />
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <Label>Availability</Label>
+                  <button
+                    type="button"
+                    onClick={addSlot}
+                    className="text-xs font-medium text-brand-500 hover:text-brand-600"
+                  >
+                    + Add slot
+                  </button>
+                </div>
+                {availabilitySlots.length === 0 && (
+                  <p className="text-xs text-stone-400">No availability slots added.</p>
+                )}
+                <div className="space-y-2">
+                  {availabilitySlots.map((slot, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <select
+                        value={slot.day}
+                        onChange={(e) => updateSlot(idx, "day", e.target.value)}
+                        className="h-9 min-w-[110px] rounded-lg border border-stone-200 bg-white px-2 text-xs text-stone-700 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                      >
+                        {DAYS.map((d) => (
+                          <option key={d} value={d}>
+                            {d.charAt(0).toUpperCase() + d.slice(1)}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={slot.start_time}
+                        onChange={(e) => updateSlot(idx, "start_time", e.target.value)}
+                        className="h-9 rounded-lg border border-stone-200 bg-white px-2 text-xs text-stone-700 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                      >
+                        {HOURS.map((h) => (
+                          <option key={h} value={h}>
+                            {h}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-xs text-stone-400">to</span>
+                      <select
+                        value={slot.end_time}
+                        onChange={(e) => updateSlot(idx, "end_time", e.target.value)}
+                        className="h-9 rounded-lg border border-stone-200 bg-white px-2 text-xs text-stone-700 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                      >
+                        {HOURS.map((h) => (
+                          <option key={h} value={h}>
+                            {h}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => removeSlot(idx)}
+                        className="ml-1 text-red-400 hover:text-red-600"
+                      >
+                        <TrashBinIcon className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {modalMode === "edit" && (

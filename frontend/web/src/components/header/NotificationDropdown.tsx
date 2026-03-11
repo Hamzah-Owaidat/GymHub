@@ -195,16 +195,6 @@ export default function NotificationDropdown() {
                   onItemClick={closeDropdown}
                   className="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
                 >
-                  <span className="relative block w-full h-10 rounded-full z-1 max-w-10">
-                    <Image
-                      width={40}
-                      height={40}
-                      src="/images/logo/logo-icon.svg"
-                      alt="Notification"
-                      className="w-full overflow-hidden rounded-full bg-orange-500 p-1.5"
-                    />
-                  </span>
-
                   <span className="block">
                     <span className="mb-1.5 block text-theme-sm text-gray-700 dark:text-gray-200">
                       <span className="font-semibold">

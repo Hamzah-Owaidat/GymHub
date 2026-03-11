@@ -188,11 +188,63 @@ async function softDelete(id) {
   return result.affectedRows > 0;
 }
 
+async function getAvailability(coachId) {
+  const [rows] = await pool.query(
+    `SELECT id, coach_id, day, start_time, end_time
+     FROM coach_availability
+     WHERE coach_id = ? AND deleted_at IS NULL
+     ORDER BY FIELD(day, 'monday','tuesday','wednesday','thursday','friday','saturday','sunday'), start_time`,
+    [coachId],
+  );
+  return rows;
+}
+
+async function replaceAvailability(coachId, slots) {
+  const existing = await getAvailability(coachId);
+  const normalizedSlots = (Array.isArray(slots) ? slots : []);
+
+  const normalize = (arr) =>
+    arr
+      .map((s) => `${s.day}|${(s.start_time || '').toString().slice(0, 5)}|${(s.end_time || '').toString().slice(0, 5)}`)
+      .sort()
+      .join(',');
+
+  if (normalize(existing) === normalize(normalizedSlots)) return;
+
+  await pool.query(
+    'UPDATE coach_availability SET deleted_at = NOW() WHERE coach_id = ? AND deleted_at IS NULL',
+    [coachId],
+  );
+
+  if (!normalizedSlots.length) return;
+
+  const values = normalizedSlots.map(() => '(?, ?, ?, ?)').join(', ');
+  const params = [];
+  normalizedSlots.forEach((s) => {
+    params.push(coachId, s.day, s.start_time || null, s.end_time || null);
+  });
+
+  await pool.query(
+    `INSERT INTO coach_availability (coach_id, day, start_time, end_time) VALUES ${values}`,
+    params,
+  );
+}
+
+async function deleteAvailability(coachId) {
+  await pool.query(
+    'UPDATE coach_availability SET deleted_at = NOW() WHERE coach_id = ? AND deleted_at IS NULL',
+    [coachId],
+  );
+}
+
 module.exports = {
   list,
   findById,
   create,
   update,
   softDelete,
+  getAvailability,
+  replaceAvailability,
+  deleteAvailability,
 };
 

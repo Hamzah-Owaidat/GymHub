@@ -55,7 +55,16 @@ const navItems: NavItem[] = [
     name: "Coaches",
     path: `${D}/coaches`,
   },
-
+  {
+    icon: <CalenderIcon />,
+    name: "Sessions",
+    path: `${D}/sessions`,
+  },
+  {
+    icon: <PieChartIcon />,
+    name: "Payments",
+    path: `${D}/payments`,
+  },
 ];
 
 const othersItems: NavItem[] = [

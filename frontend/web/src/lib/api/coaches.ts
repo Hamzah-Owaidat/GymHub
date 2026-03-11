@@ -3,6 +3,14 @@ import { Pagination, normalizePagination } from "./types";
 
 const BASE = "/api/dashboard";
 
+export type CoachAvailability = {
+  id?: number;
+  coach_id?: number;
+  day: string;
+  start_time: string | null;
+  end_time: string | null;
+};
+
 export type Coach = {
   id: number;
   user_id: number;
@@ -17,6 +25,7 @@ export type Coach = {
   user_last_name?: string;
   user_email?: string;
   gym_name?: string;
+  availability?: CoachAvailability[];
 };
 
 export type CoachListResponse = {
@@ -54,6 +63,7 @@ export async function createCoach(body: {
   bio?: string;
   price_per_session?: number;
   is_active?: boolean;
+  availability?: { day: string; start_time: string | null; end_time: string | null }[];
 }) {
   const res = await apiClient.post<{ success: boolean; coach: Coach }>(`${BASE}/coaches`, body);
   return res.data;
@@ -68,6 +78,7 @@ export async function updateCoach(
     bio: string;
     price_per_session: number;
     is_active: boolean;
+    availability: { day: string; start_time: string | null; end_time: string | null }[];
   }>,
 ) {
   const res = await apiClient.put<{ success: boolean; coach: Coach }>(`${BASE}/coaches/${id}`, body);
