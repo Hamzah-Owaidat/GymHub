@@ -20,6 +20,7 @@ import {
   type Role,
   type User,
 } from "@/lib/api/dashboard";
+import { useAuthStore } from "@/store/authStore";
 import React, { useEffect, useState } from "react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
@@ -66,6 +67,9 @@ function resolveGymImageUrl(imageUrl: string): string {
 type GymModalMode = "view" | "create" | "edit" | null;
 
 export default function GymsPage() {
+  const userRole = useAuthStore((s) => s.user?.role);
+  const isAdmin = userRole === "admin";
+
   const [data, setData] = useState<Gym[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 5, total: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
@@ -128,6 +132,9 @@ export default function GymsPage() {
   }, [pagination.page, pagination.limit, search, statusFilter]);
 
   useEffect(() => {
+    const role = useAuthStore.getState().user?.role;
+    if (role !== "admin") return;
+
     const loadOwners = async () => {
       setOwnersLoading(true);
       try {
@@ -147,7 +154,6 @@ export default function GymsPage() {
         });
         setOwners(usersRes.data);
       } catch (e) {
-        // Silent fail – owner select will just be empty
         console.error(e);
       } finally {
         setOwnersLoading(false);
@@ -307,7 +313,7 @@ export default function GymsPage() {
       return;
     }
 
-     if (!form.owner_id.trim()) {
+     if (isAdmin && !form.owner_id.trim()) {
        showError("Gym owner is required.");
        return;
      }
@@ -414,7 +420,12 @@ export default function GymsPage() {
                 <tr>
                   <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">ID</th>
                   <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">Name</th>
+                  {isAdmin && <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">Owner</th>}
                   <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">Location</th>
+                  <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">Hours</th>
+                  <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">Days</th>
+                  <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">Phone</th>
+                  <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">Email</th>
                   <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">Active</th>
                   <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">Actions</th>
                 </tr>
@@ -428,8 +439,27 @@ export default function GymsPage() {
                     <td className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">
                       {row.name}
                     </td>
+                    {isAdmin && (
+                      <td className="px-4 py-3 text-stone-600 dark:text-stone-300">
+                        {row.owner_first_name || row.owner_last_name
+                          ? `${row.owner_first_name || ""} ${row.owner_last_name || ""}`.trim()
+                          : "—"}
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-stone-600 dark:text-stone-300">
-                      {(row as any).location || "—"}
+                      {row.location || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-stone-600 dark:text-stone-300 whitespace-nowrap">
+                      {row.working_hours || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-stone-600 dark:text-stone-300 whitespace-nowrap">
+                      {row.working_days || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-stone-600 dark:text-stone-300 whitespace-nowrap">
+                      {row.phone || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-stone-600 dark:text-stone-300">
+                      {row.email || "—"}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -599,21 +629,23 @@ export default function GymsPage() {
                     placeholder="Short description"
                   />
                 </div>
-                <div>
-                  <Label>Owner</Label>
-                  <select
-                    value={form.owner_id}
-                    onChange={(e) => setForm((f) => ({ ...f, owner_id: e.target.value }))}
-                    className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
-                  >
-                    <option value="">{ownersLoading ? "Loading owners..." : "Select owner"}</option>
-                    {owners.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.first_name} {u.last_name} ({u.email})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {isAdmin && (
+                  <div>
+                    <Label>Owner</Label>
+                    <select
+                      value={form.owner_id}
+                      onChange={(e) => setForm((f) => ({ ...f, owner_id: e.target.value }))}
+                      className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                    >
+                      <option value="">{ownersLoading ? "Loading owners..." : "Select owner"}</option>
+                      {owners.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.first_name} {u.last_name} ({u.email})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

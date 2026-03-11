@@ -7,6 +7,7 @@ const { pool } = require('../config/db');
 async function list({
   search,
   gym_id,
+  gym_ids,
   is_active,
   page = 1,
   limit = 20,
@@ -25,7 +26,10 @@ async function list({
     where.push('(p.name LIKE ? OR p.description LIKE ?)');
     params.push(like, like);
   }
-  if (gym_id) {
+  if (Array.isArray(gym_ids) && gym_ids.length) {
+    where.push(`p.gym_id IN (${gym_ids.map(() => '?').join(',')})`);
+    params.push(...gym_ids);
+  } else if (gym_id) {
     where.push('p.gym_id = ?');
     params.push(gym_id);
   }

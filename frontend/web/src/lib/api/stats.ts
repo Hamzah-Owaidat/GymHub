@@ -3,14 +3,14 @@ import { apiClient } from "../axios";
 const BASE = "/api/dashboard";
 
 export type OverviewMetrics = {
-  totalUsers: number;
+  totalUsers?: number;
   totalGyms: number;
   activeCoaches: number;
   totalSessions: number;
   totalPayments: number;
   totalPlans: number;
   totalRevenue: number;
-  activeUsers: number;
+  activeUsers?: number;
 };
 
 export type MonthPoint = { month: string; count: number };

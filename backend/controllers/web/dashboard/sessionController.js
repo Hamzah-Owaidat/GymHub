@@ -19,6 +19,7 @@ function parseListQuery(query) {
 async function list(req, res, next) {
   try {
     const options = parseListQuery(req.query);
+    if (req.ownerGymIds) options.gym_ids = req.ownerGymIds;
     const result = await Session.list(options);
     res.json({ success: true, ...result });
   } catch (err) {
@@ -32,6 +33,9 @@ async function getById(req, res, next) {
     if (!id) return next(new AppError('Invalid session id', 400));
     const session = await Session.findById(id);
     if (!session) return next(new AppError('Session not found', 404));
+    if (req.ownerGymIds && !req.ownerGymIds.includes(session.gym_id)) {
+      return next(new AppError('Session not in your gyms', 403));
+    }
     res.json({ success: true, session });
   } catch (err) {
     next(err);
@@ -40,15 +44,40 @@ async function getById(req, res, next) {
 
 async function create(req, res, next) {
   try {
-    const { user_id, gym_id, coach_id, session_date, start_time, end_time, price, status } = req.body || {};
+    const { user_id, gym_id, coach_id, session_date, start_time, end_time, price, status, is_private } = req.body || {};
 
     if (!user_id || Number.isNaN(Number(user_id))) return next(new AppError('user_id is required', 400));
     if (!gym_id || Number.isNaN(Number(gym_id))) return next(new AppError('gym_id is required', 400));
+    if (req.ownerGymIds && !req.ownerGymIds.includes(Number(gym_id))) {
+      return next(new AppError('You can only create sessions for your own gyms', 403));
+    }
     if (!session_date) return next(new AppError('session_date is required', 400));
     if (!start_time) return next(new AppError('start_time is required', 400));
     if (!end_time) return next(new AppError('end_time is required', 400));
 
+    if (start_time >= end_time) {
+      return next(new AppError('start_time must be before end_time', 400));
+    }
+
     const safeStatus = status && isValidSessionStatus(status) ? status : 'booked';
+    const isPrivate =
+      is_private === true ||
+      is_private === 'true' ||
+      is_private === '1' ||
+      is_private === 1;
+
+    if (coach_id) {
+      const hasConflict = await Session.hasOverlappingPrivateSession(
+        Number(coach_id),
+        session_date,
+        start_time,
+        end_time,
+        null,
+      );
+      if (hasConflict && isPrivate) {
+        return next(new AppError('Coach already has a private session at this time', 400));
+      }
+    }
 
     const id = await Session.create({
       user_id: Number(user_id),
@@ -59,6 +88,7 @@ async function create(req, res, next) {
       end_time,
       price: price !== undefined && price !== null && price !== '' ? Number(price) : null,
       status: safeStatus,
+      is_private: isPrivate,
     });
 
     const session = await Session.findById(id);
@@ -73,7 +103,14 @@ async function update(req, res, next) {
     const id = Number(req.params.id);
     if (!id) return next(new AppError('Invalid session id', 400));
 
-    const { user_id, gym_id, coach_id, session_date, start_time, end_time, price, status } = req.body || {};
+    if (req.ownerGymIds) {
+      const existing = await Session.findById(id);
+      if (!existing || !req.ownerGymIds.includes(existing.gym_id)) {
+        return next(new AppError('Session not in your gyms', 403));
+      }
+    }
+
+    const { user_id, gym_id, coach_id, session_date, start_time, end_time, price, status, is_private } = req.body || {};
 
     const data = {};
     if (user_id !== undefined) data.user_id = Number(user_id);
@@ -84,6 +121,38 @@ async function update(req, res, next) {
     if (end_time !== undefined) data.end_time = end_time;
     if (price !== undefined) data.price = price !== null && price !== '' ? Number(price) : null;
     if (status !== undefined && isValidSessionStatus(status)) data.status = status;
+    if (is_private !== undefined) {
+      data.is_private =
+        is_private === true ||
+        is_private === 'true' ||
+        is_private === '1' ||
+        is_private === 1;
+    }
+
+    if (data.start_time && data.end_time && data.start_time >= data.end_time) {
+      return next(new AppError('start_time must be before end_time', 400));
+    }
+
+    const effectiveCoachId =
+      coach_id !== undefined ? (coach_id ? Number(coach_id) : null) : existing.coach_id;
+    const effectiveDate = session_date !== undefined ? session_date : existing.session_date;
+    const effectiveStart = data.start_time || existing.start_time;
+    const effectiveEnd = data.end_time || existing.end_time;
+    const effectiveIsPrivate =
+      data.is_private !== undefined ? data.is_private : existing.is_private === 1;
+
+    if (effectiveCoachId && effectiveIsPrivate) {
+      const hasConflict = await Session.hasOverlappingPrivateSession(
+        Number(effectiveCoachId),
+        effectiveDate,
+        effectiveStart,
+        effectiveEnd,
+        id,
+      );
+      if (hasConflict) {
+        return next(new AppError('Coach already has a private session at this time', 400));
+      }
+    }
 
     const ok = await Session.update(id, data);
     if (!ok) return next(new AppError('Session not found or not updated', 404));
@@ -100,6 +169,12 @@ async function remove(req, res, next) {
   try {
     const id = Number(req.params.id);
     if (!id) return next(new AppError('Invalid session id', 400));
+    if (req.ownerGymIds) {
+      const existing = await Session.findById(id);
+      if (!existing || !req.ownerGymIds.includes(existing.gym_id)) {
+        return next(new AppError('Session not in your gyms', 403));
+      }
+    }
     const ok = await Session.softDelete(id);
     if (!ok) return next(new AppError('Session not found', 404));
     res.json({ success: true, message: 'Session deleted' });
@@ -111,7 +186,7 @@ async function remove(req, res, next) {
 async function exportExcel(req, res, next) {
   try {
     const { sortBy, sortDir, search, gym_id, coach_id, user_id, status } = parseListQuery(req.query);
-    const result = await Session.list({ page: 1, limit: 100000, sortBy, sortDir, search, gym_id, coach_id, user_id, status });
+    const result = await Session.list({ page: 1, limit: 100000, sortBy, sortDir, search, gym_id, gym_ids: req.ownerGymIds || undefined, coach_id, user_id, status });
     const rows = result.data;
 
     const workbook = new ExcelJS.Workbook();

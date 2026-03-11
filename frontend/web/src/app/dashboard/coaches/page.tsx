@@ -15,14 +15,12 @@ import {
   updateCoach,
   deleteCoach,
   exportCoaches,
+  getCoachUsers,
   getGyms,
-  getRoles,
-  getUsers,
   type Coach,
   type CoachAvailability,
+  type CoachUser,
   type Gym,
-  type Role,
-  type User,
 } from "@/lib/api/dashboard";
 import React, { useEffect, useState } from "react";
 
@@ -41,7 +39,7 @@ const HOURS = Array.from({ length: 24 }, (_, i) => {
   return `${h}:00`;
 });
 
-type AvailabilitySlot = { day: string; start_time: string; end_time: string };
+type AvailabilitySlot = { day: string; start_time: string; end_time: string; is_private: boolean };
 
 type CoachModalMode = "view" | "create" | "edit" | null;
 
@@ -60,7 +58,7 @@ export default function CoachesPage() {
   const [exporting, setExporting] = useState(false);
 
   const [gyms, setGyms] = useState<Gym[]>([]);
-  const [coachUsers, setCoachUsers] = useState<User[]>([]);
+  const [coachUsers, setCoachUsers] = useState<CoachUser[]>([]);
   const [lookupLoaded, setLookupLoaded] = useState(false);
 
   const { error: showError, success: showSuccess } = useToast();
@@ -68,23 +66,12 @@ export default function CoachesPage() {
   const loadLookups = async () => {
     if (lookupLoaded) return;
     try {
-      const [gymsRes, rolesRes] = await Promise.all([
+      const [gymsRes, coachUsersRes] = await Promise.all([
         getGyms({ page: 1, limit: 1000, is_active: true }),
-        getRoles({ limit: 100 }),
+        getCoachUsers(),
       ]);
       setGyms(gymsRes.data);
-
-      const coachRole = rolesRes.data.find((r: Role) => r.name.toLowerCase() === "coach");
-      if (coachRole) {
-        const usersRes = await getUsers({
-          limit: 1000,
-          role_id: coachRole.id,
-          is_active: true,
-        });
-        setCoachUsers(usersRes.data);
-      } else {
-        setCoachUsers([]);
-      }
+      setCoachUsers(coachUsersRes.data);
       setLookupLoaded(true);
     } catch (e: unknown) {
       showError(e instanceof Error ? e.message : "Failed to load lookups");
@@ -161,7 +148,10 @@ export default function CoachesPage() {
   };
 
   const addSlot = () => {
-    setAvailabilitySlots((prev) => [...prev, { day: "monday", start_time: "08:00", end_time: "17:00" }]);
+    setAvailabilitySlots((prev) => [
+      ...prev,
+      { day: "monday", start_time: "08:00", end_time: "17:00", is_private: true },
+    ]);
   };
 
   const removeSlot = (idx: number) => {
@@ -199,6 +189,7 @@ export default function CoachesPage() {
         day: a.day,
         start_time: a.start_time ? a.start_time.slice(0, 5) : "08:00",
         end_time: a.end_time ? a.end_time.slice(0, 5) : "17:00",
+        is_private: a.is_private !== undefined ? !!a.is_private : true,
       })),
     );
     setModalMode("edit");
@@ -250,6 +241,7 @@ export default function CoachesPage() {
           day: s.day,
           start_time: s.start_time || null,
           end_time: s.end_time || null,
+          is_private: s.is_private,
         })),
       };
 
@@ -730,7 +722,7 @@ export default function CoachesPage() {
                 )}
                 <div className="space-y-2">
                   {availabilitySlots.map((slot, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
+                    <div key={idx} className="flex flex-wrap items-center gap-2">
                       <select
                         value={slot.day}
                         onChange={(e) => updateSlot(idx, "day", e.target.value)}
@@ -765,6 +757,21 @@ export default function CoachesPage() {
                           </option>
                         ))}
                       </select>
+                      <label className="flex items-center gap-1 text-[11px] text-stone-600 dark:text-stone-300">
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 rounded border-stone-300 text-brand-500 focus:ring-brand-500/40"
+                          checked={slot.is_private}
+                          onChange={(e) =>
+                            setAvailabilitySlots((prev) =>
+                              prev.map((s, i) =>
+                                i === idx ? { ...s, is_private: e.target.checked } : s,
+                              ),
+                            )
+                          }
+                        />
+                        Private slot
+                      </label>
                       <button
                         type="button"
                         onClick={() => removeSlot(idx)}

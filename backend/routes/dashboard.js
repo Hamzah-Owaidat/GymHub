@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const { requireAuth, requireAdmin } = require('../middleware');
+const { requireAuth, requireAdmin, requireAdminOrOwner, attachOwnerGyms } = require('../middleware');
 const roleController = require('../controllers/web/dashboard/roleController');
 const permissionController = require('../controllers/web/dashboard/permissionController');
 const userController = require('../controllers/web/dashboard/userController');
@@ -33,75 +33,70 @@ const upload = multer({ storage });
 
 const router = express.Router();
 
-router.use(requireAuth, requireAdmin);
+router.use(requireAuth);
 
-// Stats overview
-router.get('/stats/overview', statsController.overview);
+// ─── Admin-only routes ───────────────────────────────────────────────
+router.get('/roles', requireAdmin, roleController.list);
+router.get('/roles/export', requireAdmin, roleController.exportExcel);
+router.get('/roles/:id', requireAdmin, roleController.getById);
+router.post('/roles', requireAdmin, roleController.create);
+router.put('/roles/:id', requireAdmin, roleController.update);
+router.delete('/roles/:id', requireAdmin, roleController.remove);
+router.get('/roles/:id/permissions', requireAdmin, roleController.getPermissions);
 
-// Roles CRUD + permissions
-router.get('/roles', roleController.list);
-router.get('/roles/export', roleController.exportExcel);
-router.get('/roles/:id', roleController.getById);
-router.post('/roles', roleController.create);
-router.put('/roles/:id', roleController.update);
-router.delete('/roles/:id', roleController.remove);
-router.get('/roles/:id/permissions', roleController.getPermissions);
+router.get('/permissions', requireAdmin, permissionController.list);
+router.get('/permissions/export', requireAdmin, permissionController.exportExcel);
+router.get('/permissions/:id', requireAdmin, permissionController.getById);
+router.post('/permissions', requireAdmin, permissionController.create);
+router.put('/permissions/:id', requireAdmin, permissionController.update);
+router.delete('/permissions/:id', requireAdmin, permissionController.remove);
 
-// Permissions CRUD
-router.get('/permissions', permissionController.list);
-router.get('/permissions/export', permissionController.exportExcel);
-router.get('/permissions/:id', permissionController.getById);
-router.post('/permissions', permissionController.create);
-router.put('/permissions/:id', permissionController.update);
-router.delete('/permissions/:id', permissionController.remove);
+router.get('/users', requireAdmin, userController.list);
+router.get('/users/export', requireAdmin, userController.exportExcel);
+router.get('/users/:id', requireAdmin, userController.getById);
+router.post('/users', requireAdmin, userController.create);
+router.put('/users/:id', requireAdmin, userController.update);
+router.delete('/users/:id', requireAdmin, userController.remove);
 
-// Users CRUD
-router.get('/users', userController.list);
-router.get('/users/export', userController.exportExcel);
-router.get('/users/:id', userController.getById);
-router.post('/users', userController.create);
-router.put('/users/:id', userController.update);
-router.delete('/users/:id', userController.remove);
+// ─── Shared routes (admin + owner) ──────────────────────────────────
+const shared = [requireAdminOrOwner, attachOwnerGyms];
 
-// Gyms CRUD + images
-router.get('/gyms', gymController.list);
-router.get('/gyms/export', gymController.exportExcel);
-router.get('/gyms/:id', gymController.getById);
-router.post('/gyms', upload.array('images', 5), gymController.create);
-router.put('/gyms/:id', upload.array('images', 5), gymController.update);
-router.delete('/gyms/:id', gymController.remove);
+router.get('/stats/overview', ...shared, statsController.overview);
 
-// Subscription plans CRUD + export
-router.get('/subscription-plans', subscriptionPlanController.list);
-router.get('/subscription-plans/export', subscriptionPlanController.exportExcel);
-router.get('/subscription-plans/:id', subscriptionPlanController.getById);
-router.post('/subscription-plans', subscriptionPlanController.create);
-router.put('/subscription-plans/:id', subscriptionPlanController.update);
-router.delete('/subscription-plans/:id', subscriptionPlanController.remove);
+router.get('/gyms', ...shared, gymController.list);
+router.get('/gyms/export', ...shared, gymController.exportExcel);
+router.get('/gyms/:id', ...shared, gymController.getById);
+router.post('/gyms', ...shared, upload.array('images', 5), gymController.create);
+router.put('/gyms/:id', ...shared, upload.array('images', 5), gymController.update);
+router.delete('/gyms/:id', ...shared, gymController.remove);
 
-// Coaches CRUD + export
-router.get('/coaches', coachController.list);
-router.get('/coaches/export', coachController.exportExcel);
-router.get('/coaches/:id', coachController.getById);
-router.post('/coaches', coachController.create);
-router.put('/coaches/:id', coachController.update);
-router.delete('/coaches/:id', coachController.remove);
+router.get('/subscription-plans', ...shared, subscriptionPlanController.list);
+router.get('/subscription-plans/export', ...shared, subscriptionPlanController.exportExcel);
+router.get('/subscription-plans/:id', ...shared, subscriptionPlanController.getById);
+router.post('/subscription-plans', ...shared, subscriptionPlanController.create);
+router.put('/subscription-plans/:id', ...shared, subscriptionPlanController.update);
+router.delete('/subscription-plans/:id', ...shared, subscriptionPlanController.remove);
 
-// Sessions CRUD + export
-router.get('/sessions', sessionController.list);
-router.get('/sessions/export', sessionController.exportExcel);
-router.get('/sessions/:id', sessionController.getById);
-router.post('/sessions', sessionController.create);
-router.put('/sessions/:id', sessionController.update);
-router.delete('/sessions/:id', sessionController.remove);
+router.get('/coach-users', ...shared, coachController.listCoachUsers);
+router.get('/coaches', ...shared, coachController.list);
+router.get('/coaches/export', ...shared, coachController.exportExcel);
+router.get('/coaches/:id', ...shared, coachController.getById);
+router.post('/coaches', ...shared, coachController.create);
+router.put('/coaches/:id', ...shared, coachController.update);
+router.delete('/coaches/:id', ...shared, coachController.remove);
 
-// Payments CRUD + export
-router.get('/payments', paymentController.list);
-router.get('/payments/export', paymentController.exportExcel);
-router.get('/payments/:id', paymentController.getById);
-router.post('/payments', paymentController.create);
-router.put('/payments/:id', paymentController.update);
-router.delete('/payments/:id', paymentController.remove);
+router.get('/sessions', ...shared, sessionController.list);
+router.get('/sessions/export', ...shared, sessionController.exportExcel);
+router.get('/sessions/:id', ...shared, sessionController.getById);
+router.post('/sessions', ...shared, sessionController.create);
+router.put('/sessions/:id', ...shared, sessionController.update);
+router.delete('/sessions/:id', ...shared, sessionController.remove);
+
+router.get('/payments', ...shared, paymentController.list);
+router.get('/payments/export', ...shared, paymentController.exportExcel);
+router.get('/payments/:id', ...shared, paymentController.getById);
+router.post('/payments', ...shared, paymentController.create);
+router.put('/payments/:id', ...shared, paymentController.update);
+router.delete('/payments/:id', ...shared, paymentController.remove);
 
 module.exports = router;
-

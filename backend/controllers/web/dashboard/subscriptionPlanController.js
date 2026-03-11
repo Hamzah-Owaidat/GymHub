@@ -21,6 +21,7 @@ function parseListQuery(query) {
 async function list(req, res, next) {
   try {
     const options = parseListQuery(req.query);
+    if (req.ownerGymIds) options.gym_ids = req.ownerGymIds;
     const result = await SubscriptionPlan.list(options);
     res.json({ success: true, ...result });
   } catch (err) {
@@ -35,6 +36,10 @@ async function getById(req, res, next) {
 
     const plan = await SubscriptionPlan.findById(id);
     if (!plan) return next(new AppError('Subscription plan not found', 404));
+
+    if (req.ownerGymIds && !req.ownerGymIds.includes(plan.gym_id)) {
+      return next(new AppError('Plan not in your gyms', 403));
+    }
 
     res.json({ success: true, plan });
   } catch (err) {
@@ -55,6 +60,9 @@ async function create(req, res, next) {
 
     if (!gym_id || Number.isNaN(Number(gym_id))) {
       return next(new AppError('gym_id is required', 400));
+    }
+    if (req.ownerGymIds && !req.ownerGymIds.includes(Number(gym_id))) {
+      return next(new AppError('You can only create plans for your own gyms', 403));
     }
     if (!name || typeof name !== 'string') {
       return next(new AppError('Plan name is required', 400));
@@ -98,6 +106,13 @@ async function update(req, res, next) {
   try {
     const id = Number(req.params.id);
     if (!id) return next(new AppError('Invalid subscription plan id', 400));
+
+    if (req.ownerGymIds) {
+      const existing = await SubscriptionPlan.findById(id);
+      if (!existing || !req.ownerGymIds.includes(existing.gym_id)) {
+        return next(new AppError('Plan not in your gyms', 403));
+      }
+    }
 
     const {
       gym_id,
@@ -147,6 +162,10 @@ async function remove(req, res, next) {
 
     const plan = await SubscriptionPlan.findById(id);
     if (!plan) return next(new AppError('Subscription plan not found', 404));
+
+    if (req.ownerGymIds && !req.ownerGymIds.includes(plan.gym_id)) {
+      return next(new AppError('Plan not in your gyms', 403));
+    }
     const planName = plan.name;
     const gymName = plan.gym_name || '';
 
@@ -179,6 +198,7 @@ async function exportExcel(req, res, next) {
       sortDir,
       search,
       gym_id,
+      gym_ids: req.ownerGymIds || undefined,
       is_active,
     });
     const rows = result.data;

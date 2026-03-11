@@ -19,6 +19,7 @@ import {
   type Gym,
   type User,
 } from "@/lib/api/dashboard";
+import { useAuthStore } from "@/store/authStore";
 import React, { useEffect, useState } from "react";
 
 type PaymentModalMode = "view" | "create" | "edit" | null;
@@ -88,6 +89,8 @@ export default function PaymentsPage() {
 
   const loadUsers = async () => {
     if (usersLoaded) return;
+    const role = useAuthStore.getState().user?.role;
+    if (role !== "admin") { setUsersLoaded(true); return; }
     try {
       const res = await getUsers({ page: 1, limit: 1000, is_active: true });
       setUsers(res.data);

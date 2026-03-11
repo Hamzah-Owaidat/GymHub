@@ -25,6 +25,7 @@ import {
   type RecentPayment,
   type RecentSession,
 } from "@/lib/api/dashboard";
+import { useAuthStore } from "@/store/authStore";
 
 ChartJS.register(
   CategoryScale,
@@ -102,6 +103,9 @@ const chartGridColor = (dark: boolean) => dark ? "rgba(120,113,108,0.18)" : "rgb
 const chartTickColor = (dark: boolean) => dark ? STONE_400 : STONE_700;
 
 export default function OverviewPage() {
+  const userRole = useAuthStore((s) => s.user?.role);
+  const isAdmin = userRole === "admin";
+
   const [metrics, setMetrics] = useState<OverviewMetrics | null>(null);
   const [revenueByMonth, setRevenueByMonth] = useState<RevenuePoint[]>([]);
   const [sessionsByMonth, setSessionsByMonth] = useState<MonthPoint[]>([]);
@@ -132,7 +136,7 @@ export default function OverviewPage() {
         setSessionsByStatus(res.charts.sessionsByStatus);
         setPaymentsByMethod(res.charts.paymentsByMethod);
         setTopGyms(res.charts.topGyms);
-        setUserGrowth(res.charts.userGrowth);
+        setUserGrowth(res.charts.userGrowth || []);
         setRecentPayments(res.tables.recentPayments);
         setRecentSessions(res.tables.recentSessions);
       } catch {
@@ -206,11 +210,11 @@ export default function OverviewPage() {
   };
 
   const userGrowthData = {
-    labels: userGrowth.map((r) => shortMonth(r.month)),
+    labels: (userGrowth || []).map((r) => shortMonth(r.month)),
     datasets: [
       {
         label: "New Users",
-        data: userGrowth.map((r) => r.count),
+        data: (userGrowth || []).map((r) => r.count),
         borderColor: BLUE,
         backgroundColor: BLUE_BG,
         fill: true,
@@ -297,14 +301,16 @@ export default function OverviewPage() {
     <div className="space-y-6">
       {/* Metric Cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {isAdmin && (
+          <MetricCard
+            label="Total Users"
+            value={(metrics.totalUsers ?? 0).toLocaleString()}
+            accent={BRAND}
+            icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M7.5 6.5C7.5 8.981 9.519 11 12 11s4.5-2.019 4.5-4.5S14.481 2 12 2 7.5 4.019 7.5 6.5zM20 21h1v-1c0-3.859-3.141-7-7-7h-4c-3.86 0-7 3.141-7 7v1h17z"/></svg>}
+          />
+        )}
         <MetricCard
-          label="Total Users"
-          value={metrics.totalUsers.toLocaleString()}
-          accent={BRAND}
-          icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M7.5 6.5C7.5 8.981 9.519 11 12 11s4.5-2.019 4.5-4.5S14.481 2 12 2 7.5 4.019 7.5 6.5zM20 21h1v-1c0-3.859-3.141-7-7-7h-4c-3.86 0-7 3.141-7 7v1h17z"/></svg>}
-        />
-        <MetricCard
-          label="Active Gyms"
+          label={isAdmin ? "Active Gyms" : "My Gyms"}
           value={metrics.totalGyms.toLocaleString()}
           accent={EMERALD}
           icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 22l2.14-2.14 1.43 1.43 1.43-1.43-1.43-1.43L22 16.29z"/></svg>}
@@ -342,12 +348,14 @@ export default function OverviewPage() {
           accent={AMBER}
           icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-2 .89-2 2v11c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z"/></svg>}
         />
-        <MetricCard
-          label="Active Users"
-          value={metrics.activeUsers.toLocaleString()}
-          accent={EMERALD}
-          icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>}
-        />
+        {isAdmin && (
+          <MetricCard
+            label="Active Users"
+            value={(metrics.activeUsers ?? 0).toLocaleString()}
+            accent={EMERALD}
+            icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>}
+          />
+        )}
       </div>
 
       {/* Revenue & Sessions Line Charts */}
@@ -367,13 +375,15 @@ export default function OverviewPage() {
       </div>
 
       {/* User Growth + Session Status + Payment Methods */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border border-stone-200 bg-white p-5 dark:border-stone-700 dark:bg-stone-800">
-          <h3 className="mb-4 text-sm font-semibold text-stone-900 dark:text-stone-50">User Growth</h3>
-          <div className="h-[250px]">
-            <Line data={userGrowthData} options={baseLineOpts} />
+      <div className={`grid grid-cols-1 gap-4 ${isAdmin ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
+        {isAdmin && (
+          <div className="rounded-2xl border border-stone-200 bg-white p-5 dark:border-stone-700 dark:bg-stone-800">
+            <h3 className="mb-4 text-sm font-semibold text-stone-900 dark:text-stone-50">User Growth</h3>
+            <div className="h-[250px]">
+              <Line data={userGrowthData} options={baseLineOpts} />
+            </div>
           </div>
-        </div>
+        )}
         <div className="rounded-2xl border border-stone-200 bg-white p-5 dark:border-stone-700 dark:bg-stone-800">
           <h3 className="mb-4 text-sm font-semibold text-stone-900 dark:text-stone-50">Sessions by Status</h3>
           <div className="h-[250px]">

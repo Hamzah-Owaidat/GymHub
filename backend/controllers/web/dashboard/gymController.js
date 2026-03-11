@@ -74,6 +74,9 @@ function moveImagesToStorage(files, folderIndex) {
 async function list(req, res, next) {
   try {
     const options = parseListQuery(req.query);
+    if (req.ownerGymIds) {
+      options.owner_id = req.user.id;
+    }
     const result = await Gym.list(options);
 
     const dataWithRelations = await Promise.all(
@@ -104,6 +107,10 @@ async function getById(req, res, next) {
     const gym = await Gym.findById(id);
     if (!gym) return next(new AppError('Gym not found', 404));
 
+    if (req.ownerGymIds && !req.ownerGymIds.includes(id)) {
+      return next(new AppError('You do not own this gym', 403));
+    }
+
     const [images, coaches] = await Promise.all([
       Gym.getImages(id),
       Gym.getCoaches(id),
@@ -133,7 +140,9 @@ async function create(req, res, next) {
     if (!name || typeof name !== 'string') {
       return next(new AppError('Gym name is required', 400));
     }
-    if (!owner_id || Number.isNaN(Number(owner_id))) {
+
+    const effectiveOwnerId = req.user.role === 'owner' ? req.user.id : Number(owner_id);
+    if (!effectiveOwnerId || Number.isNaN(effectiveOwnerId)) {
       return next(new AppError('owner_id is required', 400));
     }
 
@@ -145,8 +154,8 @@ async function create(req, res, next) {
       working_days: working_days || null,
       phone: phone || null,
       email: email || null,
-      owner_id: Number(owner_id),
-      is_active: is_active !== undefined ? Boolean(is_active) : true,
+      owner_id: effectiveOwnerId,
+      is_active: is_active !== undefined ? (is_active === true || is_active === 'true' || is_active === '1' || is_active === 1) : true,
     });
 
     // Handle up to 5 images via uploaded files, saved under:
@@ -193,6 +202,10 @@ async function update(req, res, next) {
     const id = Number(req.params.id);
     if (!id) return next(new AppError('Invalid gym id', 400));
 
+    if (req.ownerGymIds && !req.ownerGymIds.includes(id)) {
+      return next(new AppError('You do not own this gym', 403));
+    }
+
     const {
       name,
       description,
@@ -214,8 +227,8 @@ async function update(req, res, next) {
     if (working_days !== undefined) data.working_days = working_days || null;
     if (phone !== undefined) data.phone = phone || null;
     if (email !== undefined) data.email = email || null;
-    if (owner_id !== undefined) data.owner_id = Number(owner_id);
-    if (is_active !== undefined) data.is_active = Boolean(is_active);
+    if (owner_id !== undefined && req.user.role === 'admin') data.owner_id = Number(owner_id);
+    if (is_active !== undefined) data.is_active = is_active === true || is_active === 'true' || is_active === '1' || is_active === 1;
 
     const ok = await Gym.update(id, data);
     if (!ok) return next(new AppError('Gym not found or not updated', 404));
@@ -276,6 +289,10 @@ async function remove(req, res, next) {
     const id = Number(req.params.id);
     if (!id) return next(new AppError('Invalid gym id', 400));
 
+    if (req.ownerGymIds && !req.ownerGymIds.includes(id)) {
+      return next(new AppError('You do not own this gym', 403));
+    }
+
     const gym = await Gym.findById(id);
     if (!gym) return next(new AppError('Gym not found', 404));
     const gymName = gym.name;
@@ -302,7 +319,8 @@ async function remove(req, res, next) {
 async function exportExcel(req, res, next) {
   try {
     const { sortBy, sortDir, search, owner_id, is_active } = parseListQuery(req.query);
-    const rows = await Gym.listAll({ sortBy, sortDir, search, owner_id, is_active });
+    const effectiveOwnerId = req.ownerGymIds ? req.user.id : owner_id;
+    const rows = await Gym.listAll({ sortBy, sortDir, search, owner_id: effectiveOwnerId, is_active });
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Gyms');

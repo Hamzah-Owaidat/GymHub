@@ -7,6 +7,7 @@ const { pool } = require('../config/db');
 async function list({
   search,
   gym_id,
+  gym_ids,
   is_active,
   page = 1,
   limit = 20,
@@ -25,7 +26,10 @@ async function list({
     where.push('(u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ?)');
     params.push(like, like, like);
   }
-  if (gym_id) {
+  if (Array.isArray(gym_ids) && gym_ids.length) {
+    where.push(`c.gym_id IN (${gym_ids.map(() => '?').join(',')})`);
+    params.push(...gym_ids);
+  } else if (gym_id) {
     where.push('c.gym_id = ?');
     params.push(gym_id);
   }
@@ -190,7 +194,7 @@ async function softDelete(id) {
 
 async function getAvailability(coachId) {
   const [rows] = await pool.query(
-    `SELECT id, coach_id, day, start_time, end_time
+    `SELECT id, coach_id, day, start_time, end_time, is_private
      FROM coach_availability
      WHERE coach_id = ? AND deleted_at IS NULL
      ORDER BY FIELD(day, 'monday','tuesday','wednesday','thursday','friday','saturday','sunday'), start_time`,
@@ -218,14 +222,14 @@ async function replaceAvailability(coachId, slots) {
 
   if (!normalizedSlots.length) return;
 
-  const values = normalizedSlots.map(() => '(?, ?, ?, ?)').join(', ');
+  const values = normalizedSlots.map(() => '(?, ?, ?, ?, ?)').join(', ');
   const params = [];
   normalizedSlots.forEach((s) => {
-    params.push(coachId, s.day, s.start_time || null, s.end_time || null);
+    params.push(coachId, s.day, s.start_time || null, s.end_time || null, s.is_private ? 1 : 0);
   });
 
   await pool.query(
-    `INSERT INTO coach_availability (coach_id, day, start_time, end_time) VALUES ${values}`,
+    `INSERT INTO coach_availability (coach_id, day, start_time, end_time, is_private) VALUES ${values}`,
     params,
   );
 }

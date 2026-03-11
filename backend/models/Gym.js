@@ -40,6 +40,7 @@ async function list({
   const countSql = `
     SELECT COUNT(*) AS total
     FROM gyms g
+    LEFT JOIN users u ON u.id = g.owner_id
     ${whereSql}
   `;
   const [countRows] = await pool.query(countSql, params);
@@ -60,8 +61,11 @@ async function list({
       g.rating_count,
       g.is_active,
       g.created_at,
-      g.updated_at
+      g.updated_at,
+      u.first_name AS owner_first_name,
+      u.last_name AS owner_last_name
     FROM gyms g
+    LEFT JOIN users u ON u.id = g.owner_id
     ${whereSql}
     ORDER BY g.${sortColumn} ${direction}
     LIMIT ? OFFSET ?
@@ -125,8 +129,11 @@ async function listAll({
       g.rating_count,
       g.is_active,
       g.created_at,
-      g.updated_at
+      g.updated_at,
+      u.first_name AS owner_first_name,
+      u.last_name AS owner_last_name
     FROM gyms g
+    LEFT JOIN users u ON u.id = g.owner_id
     ${whereSql}
     ORDER BY g.${sortColumn} ${direction}
   `;
@@ -152,8 +159,11 @@ async function findById(id) {
         g.rating_count,
         g.is_active,
         g.created_at,
-        g.updated_at
+        g.updated_at,
+        u.first_name AS owner_first_name,
+        u.last_name AS owner_last_name
       FROM gyms g
+      LEFT JOIN users u ON u.id = g.owner_id
       WHERE g.id = ? AND g.deleted_at IS NULL
       LIMIT 1
     `,

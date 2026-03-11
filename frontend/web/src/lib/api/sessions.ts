@@ -13,6 +13,7 @@ export type Session = {
   end_time: string;
   price: number | null;
   status: string;
+  is_private: boolean;
   created_at: string;
   updated_at: string;
   user_first_name?: string;
@@ -59,6 +60,7 @@ export async function createSession(body: {
   end_time: string;
   price?: number | null;
   status?: string;
+  is_private?: boolean;
 }) {
   const res = await apiClient.post<{ success: boolean; session: Session }>(`${BASE}/sessions`, body);
   return res.data;
@@ -75,6 +77,7 @@ export async function updateSession(
     end_time: string;
     price: number | null;
     status: string;
+    is_private: boolean;
   }>,
 ) {
   const res = await apiClient.put<{ success: boolean; session: Session }>(`${BASE}/sessions/${id}`, body);

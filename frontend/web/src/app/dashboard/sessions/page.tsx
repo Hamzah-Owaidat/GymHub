@@ -20,6 +20,7 @@ import {
   type Gym,
   type Coach,
 } from "@/lib/api/dashboard";
+import { useAuthStore } from "@/store/authStore";
 import React, { useEffect, useState } from "react";
 
 type User = { id: number; first_name: string; last_name: string; email: string };
@@ -45,6 +46,7 @@ const emptyForm = {
   end_time: "",
   price: "",
   status: "booked",
+  is_private: true,
 };
 
 export default function SessionsPage() {
@@ -95,6 +97,8 @@ export default function SessionsPage() {
 
   const loadUsers = async () => {
     if (usersLoaded) return;
+    const role = useAuthStore.getState().user?.role;
+    if (role !== "admin") { setUsersLoaded(true); return; }
     try {
       const res = await getUsers({ page: 1, limit: 1000, is_active: true });
       setUsers(res.data as User[]);
@@ -170,6 +174,7 @@ export default function SessionsPage() {
       end_time: session.end_time,
       price: session.price != null ? String(session.price) : "",
       status: session.status,
+      is_private: session.is_private,
     });
     setModalMode("edit");
   };
@@ -228,6 +233,7 @@ export default function SessionsPage() {
         end_time: form.end_time,
         price: form.price ? Number(form.price) : null,
         status: form.status,
+        is_private: form.is_private,
       };
 
       if (modalMode === "create") {
@@ -633,6 +639,44 @@ export default function SessionsPage() {
                     <option value="completed">Completed</option>
                     <option value="cancelled">Cancelled</option>
                   </select>
+                  <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+                    Booked = upcoming, Completed = finished, Cancelled = void.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-1 flex flex-col gap-2 rounded-2xl bg-stone-50 p-3.5 text-xs text-stone-700 dark:bg-stone-900/60 dark:text-stone-200">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-sm text-stone-900 dark:text-stone-50">Session visibility</p>
+                    <p className="text-xs text-stone-500 dark:text-stone-400">
+                      Private sessions cannot overlap with other private sessions for the same coach.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, is_private: true }))}
+                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+                        form.is_private
+                          ? "bg-brand-500 text-white"
+                          : "bg-stone-200 text-stone-700 dark:bg-stone-700 dark:text-stone-200"
+                      }`}
+                    >
+                      Private
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, is_private: false }))}
+                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+                        !form.is_private
+                          ? "bg-emerald-500 text-white"
+                          : "bg-stone-200 text-stone-700 dark:bg-stone-700 dark:text-stone-200"
+                      }`}
+                    >
+                      Public
+                    </button>
+                  </div>
                 </div>
               </div>
 

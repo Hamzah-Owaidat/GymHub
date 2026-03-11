@@ -7,6 +7,7 @@ const { pool } = require('../config/db');
 async function list({
   search,
   gym_id,
+  gym_ids,
   coach_id,
   user_id,
   status,
@@ -27,7 +28,10 @@ async function list({
     where.push('(u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ? OR g.name LIKE ?)');
     params.push(like, like, like, like);
   }
-  if (gym_id) {
+  if (Array.isArray(gym_ids) && gym_ids.length) {
+    where.push(`s.gym_id IN (${gym_ids.map(() => '?').join(',')})`);
+    params.push(...gym_ids);
+  } else if (gym_id) {
     where.push('s.gym_id = ?');
     params.push(gym_id);
   }
@@ -69,6 +73,7 @@ async function list({
       s.end_time,
       s.price,
       s.status,
+      s.is_private,
       s.created_at,
       s.updated_at,
       u.first_name AS user_first_name,
@@ -106,7 +111,7 @@ async function findById(id) {
       SELECT
         s.id, s.user_id, s.gym_id, s.coach_id,
         s.session_date, s.start_time, s.end_time,
-        s.price, s.status, s.created_at, s.updated_at,
+        s.price, s.status, s.is_private, s.created_at, s.updated_at,
         u.first_name AS user_first_name, u.last_name AS user_last_name, u.email AS user_email,
         g.name AS gym_name,
         cu.first_name AS coach_first_name, cu.last_name AS coach_last_name
@@ -123,16 +128,16 @@ async function findById(id) {
   return rows[0] || null;
 }
 
-async function create({ user_id, gym_id, coach_id = null, session_date, start_time, end_time, price = null, status = 'booked' }) {
+async function create({ user_id, gym_id, coach_id = null, session_date, start_time, end_time, price = null, status = 'booked', is_private = true }) {
   const [result] = await pool.query(
-    `INSERT INTO sessions (user_id, gym_id, coach_id, session_date, start_time, end_time, price, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [user_id, gym_id, coach_id, session_date, start_time, end_time, price, status],
+    `INSERT INTO sessions (user_id, gym_id, coach_id, session_date, start_time, end_time, price, status, is_private)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [user_id, gym_id, coach_id, session_date, start_time, end_time, price, status, is_private ? 1 : 0],
   );
   return result.insertId;
 }
 
-async function update(id, { user_id, gym_id, coach_id, session_date, start_time, end_time, price, status }) {
+async function update(id, { user_id, gym_id, coach_id, session_date, start_time, end_time, price, status, is_private }) {
   const fields = [];
   const params = [];
 
@@ -144,6 +149,7 @@ async function update(id, { user_id, gym_id, coach_id, session_date, start_time,
   if (end_time !== undefined) { fields.push('end_time = ?'); params.push(end_time); }
   if (price !== undefined) { fields.push('price = ?'); params.push(price); }
   if (status !== undefined) { fields.push('status = ?'); params.push(status); }
+  if (is_private !== undefined) { fields.push('is_private = ?'); params.push(is_private ? 1 : 0); }
 
   if (!fields.length) return false;
 
@@ -155,6 +161,34 @@ async function update(id, { user_id, gym_id, coach_id, session_date, start_time,
   return result.affectedRows > 0;
 }
 
+async function hasOverlappingPrivateSession(coachId, sessionDate, startTime, endTime, excludeId = null) {
+  if (!coachId || !sessionDate || !startTime || !endTime) return false;
+
+  const params = [coachId, sessionDate, endTime, startTime];
+  let extraWhere = '';
+  if (excludeId) {
+    extraWhere = 'AND s.id <> ?';
+    params.push(excludeId);
+  }
+
+  const [rows] = await pool.query(
+    `
+      SELECT s.id
+      FROM sessions s
+      WHERE s.deleted_at IS NULL
+        AND s.coach_id = ?
+        AND s.session_date = ?
+        AND s.is_private = 1
+        AND NOT (s.end_time <= ? OR s.start_time >= ?)
+        ${extraWhere}
+      LIMIT 1
+    `,
+    params,
+  );
+
+  return rows.length > 0;
+}
+
 async function softDelete(id) {
   const [result] = await pool.query(
     'UPDATE sessions SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL',
@@ -163,4 +197,4 @@ async function softDelete(id) {
   return result.affectedRows > 0;
 }
 
-module.exports = { list, findById, create, update, softDelete };
+module.exports = { list, findById, create, update, softDelete, hasOverlappingPrivateSession };

@@ -13,6 +13,8 @@ export type Gym = {
   phone: string | null;
   email: string | null;
   owner_id: number;
+  owner_first_name?: string;
+  owner_last_name?: string;
   rating_average: number | null;
   rating_count: number | null;
   is_active: boolean;

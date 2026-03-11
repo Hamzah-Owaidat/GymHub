@@ -1,9 +1,10 @@
 "use client";
-import React, { useEffect, useRef, useState,useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
+import { useAuthStore } from "../store/authStore";
 import {
   BoxCubeIcon,
   CalenderIcon,
@@ -29,61 +30,47 @@ type NavItem = {
 
 const D = "/dashboard";
 
-const navItems: NavItem[] = [
-  {
-    icon: <GridIcon />,
-    name: "Dashboard",
-    subItems: [{ name: "Overview", path: D, pro: false }],
-  },
-  {
-    icon: <UserCircleIcon />,
-    name: "Users",
-    path: `${D}/users`,
-  },
-  {
-    icon: <BoxCubeIcon />,
-    name: "Gyms",
-    path: `${D}/gyms`,
-  },
-  {
-    icon: <TableIcon />,
-    name: "Subscription Plans",
-    path: `${D}/subscription-plans`,
-  },
-  {
-    icon: <UserCircleIcon />,
-    name: "Coaches",
-    path: `${D}/coaches`,
-  },
-  {
-    icon: <CalenderIcon />,
-    name: "Sessions",
-    path: `${D}/sessions`,
-  },
-  {
-    icon: <PieChartIcon />,
-    name: "Payments",
-    path: `${D}/payments`,
-  },
-];
-
-const othersItems: NavItem[] = [
-  {
-    icon: <LockIcon />,
-    name: "Roles",
-    path: `${D}/roles`,
-  },
-  {
-    icon: <ListIcon />,
-    name: "Permissions",
-    path: `${D}/permissions`,
-  },
-  
-];
-
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
+  const user = useAuthStore((s) => s.user);
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  const role = mounted ? (user?.role || "user") : "admin";
+
+  const navItems = useMemo<NavItem[]>(() => {
+    const items: NavItem[] = [
+      {
+        icon: <GridIcon />,
+        name: "Dashboard",
+        subItems: [{ name: "Overview", path: D, pro: false }],
+      },
+    ];
+
+    if (role === "admin") {
+      items.push({ icon: <UserCircleIcon />, name: "Users", path: `${D}/users` });
+    }
+
+    items.push(
+      { icon: <BoxCubeIcon />, name: role === "owner" ? "My Gyms" : "Gyms", path: `${D}/gyms` },
+      { icon: <TableIcon />, name: "Subscription Plans", path: `${D}/subscription-plans` },
+      { icon: <UserCircleIcon />, name: "Coaches", path: `${D}/coaches` },
+      { icon: <CalenderIcon />, name: "Sessions", path: `${D}/sessions` },
+      { icon: <PieChartIcon />, name: "Payments", path: `${D}/payments` },
+    );
+
+    return items;
+  }, [role]);
+
+  const othersItems = useMemo<NavItem[]>(() => {
+    if (role !== "admin") return [];
+    return [
+      { icon: <LockIcon />, name: "Roles", path: `${D}/roles` },
+      { icon: <ListIcon />, name: "Permissions", path: `${D}/permissions` },
+    ];
+  }, [role]);
 
   const renderMenuItems = (
     navItems: NavItem[],
@@ -343,22 +330,24 @@ const AppSidebar: React.FC = () => {
               {renderMenuItems(navItems, "main")}
             </div>
 
-            <div className="">
-              <h2
-                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
-                  !isExpanded && !isHovered
-                    ? "lg:justify-center"
-                    : "justify-start"
-                }`}
-              >
-                {isExpanded || isHovered || isMobileOpen ? (
-                  "Security"
-                ) : (
-                  <HorizontaLDots />
-                )}
-              </h2>
-              {renderMenuItems(othersItems, "others")}
-            </div>
+            {othersItems.length > 0 && (
+              <div className="">
+                <h2
+                  className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
+                    !isExpanded && !isHovered
+                      ? "lg:justify-center"
+                      : "justify-start"
+                  }`}
+                >
+                  {isExpanded || isHovered || isMobileOpen ? (
+                    "Security"
+                  ) : (
+                    <HorizontaLDots />
+                  )}
+                </h2>
+                {renderMenuItems(othersItems, "others")}
+              </div>
+            )}
           </div>
         </nav>
       </div>

@@ -21,6 +21,7 @@ function parseListQuery(query) {
 async function list(req, res, next) {
   try {
     const options = parseListQuery(req.query);
+    if (req.ownerGymIds) options.gym_ids = req.ownerGymIds;
     const result = await Payment.list(options);
     res.json({ success: true, ...result });
   } catch (err) {
@@ -34,6 +35,9 @@ async function getById(req, res, next) {
     if (!id) return next(new AppError('Invalid payment id', 400));
     const payment = await Payment.findById(id);
     if (!payment) return next(new AppError('Payment not found', 404));
+    if (req.ownerGymIds && !req.ownerGymIds.includes(payment.gym_id)) {
+      return next(new AppError('Payment not in your gyms', 403));
+    }
     res.json({ success: true, payment });
   } catch (err) {
     next(err);
@@ -46,6 +50,9 @@ async function create(req, res, next) {
 
     if (!user_id || Number.isNaN(Number(user_id))) return next(new AppError('user_id is required', 400));
     if (!gym_id || Number.isNaN(Number(gym_id))) return next(new AppError('gym_id is required', 400));
+    if (req.ownerGymIds && !req.ownerGymIds.includes(Number(gym_id))) {
+      return next(new AppError('You can only create payments for your own gyms', 403));
+    }
     if (amount === undefined || amount === null || Number.isNaN(Number(amount))) return next(new AppError('amount is required', 400));
 
     const safeStatus = status && isValidPaymentStatus(status) ? status : 'pending';
@@ -71,6 +78,13 @@ async function update(req, res, next) {
   try {
     const id = Number(req.params.id);
     if (!id) return next(new AppError('Invalid payment id', 400));
+
+    if (req.ownerGymIds) {
+      const existing = await Payment.findById(id);
+      if (!existing || !req.ownerGymIds.includes(existing.gym_id)) {
+        return next(new AppError('Payment not in your gyms', 403));
+      }
+    }
 
     const { user_id, gym_id, subscription_id, session_id, amount, method, status } = req.body || {};
 
@@ -98,6 +112,12 @@ async function remove(req, res, next) {
   try {
     const id = Number(req.params.id);
     if (!id) return next(new AppError('Invalid payment id', 400));
+    if (req.ownerGymIds) {
+      const existing = await Payment.findById(id);
+      if (!existing || !req.ownerGymIds.includes(existing.gym_id)) {
+        return next(new AppError('Payment not in your gyms', 403));
+      }
+    }
     const ok = await Payment.softDelete(id);
     if (!ok) return next(new AppError('Payment not found', 404));
     res.json({ success: true, message: 'Payment deleted' });
@@ -109,7 +129,7 @@ async function remove(req, res, next) {
 async function exportExcel(req, res, next) {
   try {
     const { sortBy, sortDir, search, gym_id, user_id, status, method } = parseListQuery(req.query);
-    const result = await Payment.list({ page: 1, limit: 100000, sortBy, sortDir, search, gym_id, user_id, status, method });
+    const result = await Payment.list({ page: 1, limit: 100000, sortBy, sortDir, search, gym_id, gym_ids: req.ownerGymIds || undefined, user_id, status, method });
     const rows = result.data;
 
     const workbook = new ExcelJS.Workbook();

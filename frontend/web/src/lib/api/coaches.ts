@@ -9,6 +9,7 @@ export type CoachAvailability = {
   day: string;
   start_time: string | null;
   end_time: string | null;
+  is_private?: boolean;
 };
 
 export type Coach = {
@@ -63,7 +64,7 @@ export async function createCoach(body: {
   bio?: string;
   price_per_session?: number;
   is_active?: boolean;
-  availability?: { day: string; start_time: string | null; end_time: string | null }[];
+  availability?: { day: string; start_time: string | null; end_time: string | null; is_private?: boolean }[];
 }) {
   const res = await apiClient.post<{ success: boolean; coach: Coach }>(`${BASE}/coaches`, body);
   return res.data;
@@ -78,7 +79,7 @@ export async function updateCoach(
     bio: string;
     price_per_session: number;
     is_active: boolean;
-    availability: { day: string; start_time: string | null; end_time: string | null }[];
+    availability: { day: string; start_time: string | null; end_time: string | null; is_private?: boolean }[];
   }>,
 ) {
   const res = await apiClient.put<{ success: boolean; coach: Coach }>(`${BASE}/coaches/${id}`, body);
@@ -87,6 +88,18 @@ export async function updateCoach(
 
 export async function deleteCoach(id: number) {
   await apiClient.delete(`${BASE}/coaches/${id}`);
+}
+
+export type CoachUser = {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+};
+
+export async function getCoachUsers() {
+  const res = await apiClient.get<{ success: boolean; data: CoachUser[] }>(`${BASE}/coach-users`);
+  return res.data;
 }
 
 export async function exportCoaches(params?: {

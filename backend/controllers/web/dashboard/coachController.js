@@ -1,4 +1,5 @@
 const Coach = require('../../../models/Coach');
+const { pool } = require('../../../config/db');
 const AppError = require('../../../utils/AppError');
 const ExcelJS = require('exceljs');
 const notificationService = require('../../../services/notificationService');
@@ -19,9 +20,53 @@ function parseListQuery(query) {
   return { page, limit, sortBy, sortDir, search, gym_id, is_active };
 }
 
+function validateAvailabilitySlots(slots = []) {
+  if (!Array.isArray(slots) || !slots.length) return;
+
+  const byDay = new Map();
+
+  for (const rawSlot of slots) {
+    const slot = {
+      day: rawSlot.day,
+      start_time: rawSlot.start_time,
+      end_time: rawSlot.end_time,
+    };
+
+    if (!isValidDay(slot.day)) {
+      throw new AppError(`Invalid day: ${slot.day}`, 400);
+    }
+    if (!slot.start_time || !slot.end_time) {
+      throw new AppError('Availability start_time and end_time are required for each slot', 400);
+    }
+    if (slot.start_time >= slot.end_time) {
+      throw new AppError(`Availability start_time must be before end_time for ${slot.day}`, 400);
+    }
+
+    const key = slot.day;
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push(slot);
+  }
+
+  for (const [day, slotsForDay] of byDay.entries()) {
+    const sorted = [...slotsForDay].sort((a, b) =>
+      a.start_time.localeCompare(b.start_time),
+    );
+    for (let i = 1; i < sorted.length; i += 1) {
+      const prev = sorted[i - 1];
+      const curr = sorted[i];
+      if (curr.start_time < prev.end_time) {
+        throw new AppError(`Availability slots overlap on ${day}`, 400);
+      }
+    }
+  }
+}
+
 async function list(req, res, next) {
   try {
     const options = parseListQuery(req.query);
+    if (req.ownerGymIds) {
+      options.gym_ids = req.ownerGymIds;
+    }
     const result = await Coach.list(options);
 
     const dataWithAvailability = await Promise.all(
@@ -44,6 +89,10 @@ async function getById(req, res, next) {
 
     const coach = await Coach.findById(id);
     if (!coach) return next(new AppError('Coach not found', 404));
+
+    if (req.ownerGymIds && !req.ownerGymIds.includes(coach.gym_id)) {
+      return next(new AppError('Coach not in your gyms', 403));
+    }
 
     coach.availability = await Coach.getAvailability(id);
 
@@ -71,12 +120,15 @@ async function create(req, res, next) {
     if (!gym_id || Number.isNaN(Number(gym_id))) {
       return next(new AppError('gym_id is required', 400));
     }
+    if (req.ownerGymIds && !req.ownerGymIds.includes(Number(gym_id))) {
+      return next(new AppError('You can only add coaches to your own gyms', 403));
+    }
 
-    if (Array.isArray(availability)) {
-      for (const slot of availability) {
-        if (!isValidDay(slot.day)) {
-          return next(new AppError(`Invalid day: ${slot.day}`, 400));
-        }
+    if (Array.isArray(availability) && availability.length) {
+      try {
+        validateAvailabilitySlots(availability);
+      } catch (err) {
+        return next(err);
       }
     }
 
@@ -119,6 +171,13 @@ async function update(req, res, next) {
     const id = Number(req.params.id);
     if (!id) return next(new AppError('Invalid coach id', 400));
 
+    if (req.ownerGymIds) {
+      const existing = await Coach.findById(id);
+      if (!existing || !req.ownerGymIds.includes(existing.gym_id)) {
+        return next(new AppError('Coach not in your gyms', 403));
+      }
+    }
+
     const {
       user_id,
       gym_id,
@@ -130,10 +189,10 @@ async function update(req, res, next) {
     } = req.body || {};
 
     if (Array.isArray(availability)) {
-      for (const slot of availability) {
-        if (!isValidDay(slot.day)) {
-          return next(new AppError(`Invalid day: ${slot.day}`, 400));
-        }
+      try {
+        validateAvailabilitySlots(availability);
+      } catch (err) {
+        return next(err);
       }
     }
 
@@ -174,6 +233,10 @@ async function remove(req, res, next) {
 
     const coach = await Coach.findById(id);
     if (!coach) return next(new AppError('Coach not found', 404));
+
+    if (req.ownerGymIds && !req.ownerGymIds.includes(coach.gym_id)) {
+      return next(new AppError('Coach not in your gyms', 403));
+    }
     const coachName = `${coach.user_first_name || ''} ${coach.user_last_name || ''}`.trim() || 'Coach';
     const gymName = coach.gym_name || '';
 
@@ -208,6 +271,7 @@ async function exportExcel(req, res, next) {
       sortDir,
       search,
       gym_id,
+      gym_ids: req.ownerGymIds || undefined,
       is_active,
     });
     const rows = result.data;
@@ -279,6 +343,23 @@ async function exportExcel(req, res, next) {
   }
 }
 
+async function listCoachUsers(req, res, next) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT u.id, u.first_name, u.last_name, u.email
+       FROM users u
+       INNER JOIN roles r ON r.id = u.role_id
+       WHERE r.name = 'coach'
+         AND u.is_active = 1
+         AND u.deleted_at IS NULL
+       ORDER BY u.first_name, u.last_name`,
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   list,
   getById,
@@ -286,5 +367,6 @@ module.exports = {
   update,
   remove,
   exportExcel,
+  listCoachUsers,
 };
 
