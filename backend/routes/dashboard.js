@@ -11,6 +11,7 @@ const subscriptionPlanController = require('../controllers/web/dashboard/subscri
 const coachController = require('../controllers/web/dashboard/coachController');
 const sessionController = require('../controllers/web/dashboard/sessionController');
 const paymentController = require('../controllers/web/dashboard/paymentController');
+const statsController = require('../controllers/web/dashboard/statsController');
 
 const tmpUploadDir = path.join(__dirname, '..', 'public', 'storage', 'tmp');
 if (!fs.existsSync(tmpUploadDir)) {
@@ -33,6 +34,9 @@ const upload = multer({ storage });
 const router = express.Router();
 
 router.use(requireAuth, requireAdmin);
+
+// Stats overview
+router.get('/stats/overview', statsController.overview);
 
 // Roles CRUD + permissions
 router.get('/roles', roleController.list);

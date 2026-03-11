@@ -1,0 +1,171 @@
+const { pool } = require('../../../config/db');
+
+async function overview(req, res, next) {
+  try {
+    const [
+      [usersRow],
+      [gymsRow],
+      [coachesRow],
+      [sessionsRow],
+      [paymentsRow],
+      [plansRow],
+      [revenueRow],
+      [activeUsersRow],
+    ] = await Promise.all([
+      pool.query('SELECT COUNT(*) AS total FROM users WHERE deleted_at IS NULL'),
+      pool.query('SELECT COUNT(*) AS total FROM gyms WHERE deleted_at IS NULL'),
+      pool.query('SELECT COUNT(*) AS total FROM coaches WHERE deleted_at IS NULL AND is_active = 1'),
+      pool.query('SELECT COUNT(*) AS total FROM sessions WHERE deleted_at IS NULL'),
+      pool.query('SELECT COUNT(*) AS total FROM payments WHERE deleted_at IS NULL'),
+      pool.query('SELECT COUNT(*) AS total FROM subscription_plans WHERE deleted_at IS NULL'),
+      pool.query("SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE deleted_at IS NULL AND status = 'paid'"),
+      pool.query('SELECT COUNT(*) AS total FROM users WHERE deleted_at IS NULL AND is_active = 1'),
+    ]);
+
+    const metrics = {
+      totalUsers: Number(usersRow[0].total),
+      totalGyms: Number(gymsRow[0].total),
+      activeCoaches: Number(coachesRow[0].total),
+      totalSessions: Number(sessionsRow[0].total),
+      totalPayments: Number(paymentsRow[0].total),
+      totalPlans: Number(plansRow[0].total),
+      totalRevenue: Number(revenueRow[0].total),
+      activeUsers: Number(activeUsersRow[0].total),
+    };
+
+    const [revenueByMonth] = await pool.query(`
+      SELECT
+        DATE_FORMAT(created_at, '%Y-%m') AS month,
+        SUM(amount) AS revenue,
+        COUNT(*) AS count
+      FROM payments
+      WHERE deleted_at IS NULL AND status = 'paid'
+        AND created_at >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+      GROUP BY month
+      ORDER BY month ASC
+    `);
+
+    const [sessionsByMonth] = await pool.query(`
+      SELECT
+        DATE_FORMAT(session_date, '%Y-%m') AS month,
+        COUNT(*) AS count
+      FROM sessions
+      WHERE deleted_at IS NULL
+        AND session_date >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+      GROUP BY month
+      ORDER BY month ASC
+    `);
+
+    const [sessionsByStatus] = await pool.query(`
+      SELECT status, COUNT(*) AS count
+      FROM sessions
+      WHERE deleted_at IS NULL
+      GROUP BY status
+    `);
+
+    const [paymentsByMethod] = await pool.query(`
+      SELECT COALESCE(method, 'unknown') AS method, COUNT(*) AS count
+      FROM payments
+      WHERE deleted_at IS NULL
+      GROUP BY method
+    `);
+
+    const [topGyms] = await pool.query(`
+      SELECT g.name, COUNT(s.id) AS session_count,
+             COALESCE(SUM(p2.revenue), 0) AS revenue
+      FROM gyms g
+      LEFT JOIN sessions s ON s.gym_id = g.id AND s.deleted_at IS NULL
+      LEFT JOIN (
+        SELECT gym_id, SUM(amount) AS revenue
+        FROM payments
+        WHERE deleted_at IS NULL AND status = 'paid'
+        GROUP BY gym_id
+      ) p2 ON p2.gym_id = g.id
+      WHERE g.deleted_at IS NULL
+      GROUP BY g.id, g.name
+      ORDER BY session_count DESC
+      LIMIT 5
+    `);
+
+    const [recentPayments] = await pool.query(`
+      SELECT
+        p.id, p.amount, p.method, p.status, p.created_at,
+        u.first_name AS user_first_name, u.last_name AS user_last_name,
+        g.name AS gym_name
+      FROM payments p
+      JOIN users u ON u.id = p.user_id
+      JOIN gyms g ON g.id = p.gym_id
+      WHERE p.deleted_at IS NULL
+      ORDER BY p.created_at DESC
+      LIMIT 8
+    `);
+
+    const [recentSessions] = await pool.query(`
+      SELECT
+        s.id, s.session_date, s.start_time, s.end_time, s.status, s.price,
+        u.first_name AS user_first_name, u.last_name AS user_last_name,
+        g.name AS gym_name
+      FROM sessions s
+      JOIN users u ON u.id = s.user_id
+      JOIN gyms g ON g.id = s.gym_id
+      WHERE s.deleted_at IS NULL
+      ORDER BY s.created_at DESC
+      LIMIT 8
+    `);
+
+    const [userGrowth] = await pool.query(`
+      SELECT
+        DATE_FORMAT(created_at, '%Y-%m') AS month,
+        COUNT(*) AS count
+      FROM users
+      WHERE deleted_at IS NULL
+        AND created_at >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+      GROUP BY month
+      ORDER BY month ASC
+    `);
+
+    res.json({
+      success: true,
+      metrics,
+      charts: {
+        revenueByMonth: revenueByMonth.map((r) => ({
+          month: r.month,
+          revenue: Number(r.revenue),
+          count: Number(r.count),
+        })),
+        sessionsByMonth: sessionsByMonth.map((r) => ({
+          month: r.month,
+          count: Number(r.count),
+        })),
+        sessionsByStatus: sessionsByStatus.map((r) => ({
+          status: r.status,
+          count: Number(r.count),
+        })),
+        paymentsByMethod: paymentsByMethod.map((r) => ({
+          method: r.method,
+          count: Number(r.count),
+        })),
+        topGyms: topGyms.map((r) => ({
+          name: r.name,
+          sessionCount: Number(r.session_count),
+          revenue: Number(r.revenue),
+        })),
+        userGrowth: userGrowth.map((r) => ({
+          month: r.month,
+          count: Number(r.count),
+        })),
+      },
+      tables: {
+        recentPayments: recentPayments.map((r) => ({
+          ...r,
+          amount: Number(r.amount),
+        })),
+        recentSessions,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { overview };

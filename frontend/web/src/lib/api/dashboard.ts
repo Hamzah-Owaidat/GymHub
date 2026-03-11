@@ -8,3 +8,4 @@ export * from "./coaches";
 export * from "./sessions";
 export * from "./payments";
 export * from "./notifications";
+export * from "./stats";
