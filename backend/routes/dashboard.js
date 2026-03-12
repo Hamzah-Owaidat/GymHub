@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const { requireAuth, requireAdmin, requireAdminOrOwner, attachOwnerGyms } = require('../middleware');
+const { requireAuth, requireAdmin, requireAdminOrOwner, attachOwnerGyms, requireRole } = require('../middleware');
 const roleController = require('../controllers/web/dashboard/roleController');
 const permissionController = require('../controllers/web/dashboard/permissionController');
 const userController = require('../controllers/web/dashboard/userController');
@@ -34,6 +34,8 @@ const upload = multer({ storage });
 const router = express.Router();
 
 router.use(requireAuth);
+
+const requireCoach = requireRole('coach');
 
 // ─── Admin-only routes ───────────────────────────────────────────────
 router.get('/roles', requireAdmin, roleController.list);
@@ -98,5 +100,11 @@ router.get('/payments/:id', ...shared, paymentController.getById);
 router.post('/payments', ...shared, paymentController.create);
 router.put('/payments/:id', ...shared, paymentController.update);
 router.delete('/payments/:id', ...shared, paymentController.remove);
+
+// ─── Coach-only routes ────────────────────────────────────────────────
+
+router.get('/coach/me', requireCoach, coachController.getSelfProfile);
+router.put('/coach/availability', requireCoach, coachController.updateMyAvailability);
+router.get('/coach/sessions', requireCoach, coachController.listMySessions);
 
 module.exports = router;

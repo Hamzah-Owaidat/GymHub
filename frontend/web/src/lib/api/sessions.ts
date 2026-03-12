@@ -51,6 +51,19 @@ export async function getSessionById(id: number) {
   return res.data;
 }
 
+export async function getMySessions(params?: {
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  sortDir?: string;
+  search?: string;
+  status?: string;
+}) {
+  const res = await apiClient.get<any>(`${BASE}/coach/sessions`, { params });
+  const { pagination, ...rest } = res.data;
+  return { ...rest, pagination: normalizePagination(pagination) } as SessionListResponse;
+}
+
 export async function createSession(body: {
   user_id: number;
   gym_id: number;

@@ -56,6 +56,7 @@ async function list({
       g.working_days,
       g.phone,
       g.email,
+      g.session_price,
       g.owner_id,
       g.rating_average,
       g.rating_count,
@@ -124,6 +125,7 @@ async function listAll({
       g.working_days,
       g.phone,
       g.email,
+      g.session_price,
       g.owner_id,
       g.rating_average,
       g.rating_count,
@@ -154,6 +156,7 @@ async function findById(id) {
         g.working_days,
         g.phone,
         g.email,
+        g.session_price,
         g.owner_id,
         g.rating_average,
         g.rating_count,
@@ -180,15 +183,16 @@ async function create({
   working_days = null,
   phone = null,
   email = null,
+  session_price = null,
   owner_id,
   is_active = true,
 }) {
   const [result] = await pool.query(
     `
-      INSERT INTO gyms (name, description, location, working_hours, working_days, phone, email, owner_id, is_active)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO gyms (name, description, location, working_hours, working_days, phone, email, session_price, owner_id, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
-    [name, description, location, working_hours, working_days, phone, email, owner_id, is_active ? 1 : 0]
+    [name, description, location, working_hours, working_days, phone, email, session_price, owner_id, is_active ? 1 : 0]
   );
   return result.insertId;
 }
@@ -201,6 +205,7 @@ async function update(id, {
   working_days,
   phone,
   email,
+  session_price,
   owner_id,
   is_active,
 }) {
@@ -234,6 +239,10 @@ async function update(id, {
   if (email !== undefined) {
     fields.push('email = ?');
     params.push(email);
+  }
+  if (session_price !== undefined) {
+    fields.push('session_price = ?');
+    params.push(session_price);
   }
   if (owner_id !== undefined) {
     fields.push('owner_id = ?');

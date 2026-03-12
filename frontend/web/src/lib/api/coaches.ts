@@ -119,3 +119,16 @@ export async function exportCoaches(params?: {
   URL.revokeObjectURL(url);
 }
 
+export async function getMyCoachProfile() {
+  const res = await apiClient.get<{ success: boolean; coach: Coach }>(`${BASE}/coach/me`);
+  return res.data;
+}
+
+export async function updateMyAvailability(slots: { day: string; start_time: string | null; end_time: string | null; is_private?: boolean }[]) {
+  const res = await apiClient.put<{ success: boolean; availability: CoachAvailability[] }>(
+    `${BASE}/coach/availability`,
+    { availability: slots },
+  );
+  return res.data;
+}
+

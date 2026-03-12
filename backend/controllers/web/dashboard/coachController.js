@@ -1,4 +1,5 @@
 const Coach = require('../../../models/Coach');
+const Session = require('../../../models/Session');
 const { pool } = require('../../../config/db');
 const AppError = require('../../../utils/AppError');
 const ExcelJS = require('exceljs');
@@ -59,6 +60,44 @@ function validateAvailabilitySlots(slots = []) {
       }
     }
   }
+}
+
+async function getCurrentCoachForUser(req) {
+  const userId = req.user && req.user.id;
+  if (!userId) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const [rows] = await pool.query(
+    `
+      SELECT
+        c.id,
+        c.user_id,
+        c.gym_id,
+        c.specialization,
+        c.bio,
+        c.price_per_session,
+        c.is_active,
+        c.created_at,
+        c.updated_at,
+        u.first_name AS user_first_name,
+        u.last_name AS user_last_name,
+        u.email AS user_email,
+        g.name AS gym_name
+      FROM coaches c
+      JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
+      JOIN gyms g ON g.id = c.gym_id AND g.deleted_at IS NULL
+      WHERE c.user_id = ? AND c.deleted_at IS NULL
+      LIMIT 1
+    `,
+    [userId],
+  );
+
+  const coach = rows[0];
+  if (!coach) {
+    throw new AppError('Coach profile not found', 404);
+  }
+  return coach;
 }
 
 async function list(req, res, next) {
@@ -360,6 +399,65 @@ async function listCoachUsers(req, res, next) {
   }
 }
 
+async function getSelfProfile(req, res, next) {
+  try {
+    const coach = await getCurrentCoachForUser(req);
+    coach.availability = await Coach.getAvailability(coach.id);
+    res.json({ success: true, coach });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function updateMyAvailability(req, res, next) {
+  try {
+    const coach = await getCurrentCoachForUser(req);
+    const { availability } = req.body || {};
+
+    if (!Array.isArray(availability)) {
+      return next(new AppError('availability must be an array', 400));
+    }
+
+    try {
+      validateAvailabilitySlots(availability);
+    } catch (err) {
+      return next(err);
+    }
+
+    await Coach.replaceAvailability(coach.id, availability);
+    const updatedAvailability = await Coach.getAvailability(coach.id);
+    res.json({ success: true, availability: updatedAvailability });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function listMySessions(req, res, next) {
+  try {
+    const coach = await getCurrentCoachForUser(req);
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 20;
+    const sortBy = req.query.sortBy || undefined;
+    const sortDir = req.query.sortDir || undefined;
+    const search = req.query.search || undefined;
+    const status = req.query.status || undefined;
+
+    const result = await Session.list({
+      page,
+      limit,
+      sortBy,
+      sortDir,
+      search,
+      coach_id: coach.id,
+      status,
+    });
+
+    res.json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   list,
   getById,
@@ -368,5 +466,8 @@ module.exports = {
   remove,
   exportExcel,
   listCoachUsers,
+  getSelfProfile,
+  updateMyAvailability,
+  listMySessions,
 };
 

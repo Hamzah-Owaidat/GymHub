@@ -132,6 +132,7 @@ async function create(req, res, next) {
       working_days,
       phone,
       email,
+      session_price,
       owner_id,
       is_active,
       coach_user_ids,
@@ -154,6 +155,7 @@ async function create(req, res, next) {
       working_days: working_days || null,
       phone: phone || null,
       email: email || null,
+      session_price: session_price != null && session_price !== '' ? Number(session_price) : null,
       owner_id: effectiveOwnerId,
       is_active: is_active !== undefined ? (is_active === true || is_active === 'true' || is_active === '1' || is_active === 1) : true,
     });
@@ -214,6 +216,7 @@ async function update(req, res, next) {
       working_days,
       phone,
       email,
+      session_price,
       owner_id,
       is_active,
       coach_user_ids,
@@ -227,6 +230,7 @@ async function update(req, res, next) {
     if (working_days !== undefined) data.working_days = working_days || null;
     if (phone !== undefined) data.phone = phone || null;
     if (email !== undefined) data.email = email || null;
+    if (session_price !== undefined) data.session_price = session_price != null && session_price !== '' ? Number(session_price) : null;
     if (owner_id !== undefined && req.user.role === 'admin') data.owner_id = Number(owner_id);
     if (is_active !== undefined) data.is_active = is_active === true || is_active === 'true' || is_active === '1' || is_active === 1;
 

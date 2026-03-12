@@ -18,13 +18,9 @@ export default function RootPage() {
     return <div className="min-h-screen bg-stone-50 dark:bg-stone-950" />;
   }
 
-  if (isAuthenticated) {
-    return (
-      <UserLayout>
-        <HomeContent />
-      </UserLayout>
-    );
-  }
-
-  return <HomeContent />;
+  return (
+    <UserLayout>
+      <HomeContent />
+    </UserLayout>
+  );
 }

@@ -41,6 +41,14 @@ const AppSidebar: React.FC = () => {
   const role = mounted ? (user?.role || "user") : "admin";
 
   const navItems = useMemo<NavItem[]>(() => {
+    if (role === "coach") {
+      return [
+        { icon: <GridIcon />, name: "Dashboard", path: `${D}/coach` },
+        { icon: <CalenderIcon />, name: "My Sessions", path: `${D}/coach/sessions` },
+        { icon: <PageIcon />, name: "My Availability", path: `${D}/coach/availability` },
+      ];
+    }
+
     const items: NavItem[] = [
       {
         icon: <GridIcon />,
