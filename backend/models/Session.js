@@ -68,7 +68,7 @@ async function list({
       s.user_id,
       s.gym_id,
       s.coach_id,
-      s.session_date,
+      DATE_FORMAT(s.session_date, '%Y-%m-%d') AS session_date,
       s.start_time,
       s.end_time,
       s.price,
@@ -110,7 +110,7 @@ async function findById(id) {
     `
       SELECT
         s.id, s.user_id, s.gym_id, s.coach_id,
-        s.session_date, s.start_time, s.end_time,
+        DATE_FORMAT(s.session_date, '%Y-%m-%d') AS session_date, s.start_time, s.end_time,
         s.price, s.status, s.is_private, s.created_at, s.updated_at,
         u.first_name AS user_first_name, u.last_name AS user_last_name, u.email AS user_email,
         g.name AS gym_name,
@@ -189,6 +189,97 @@ async function hasOverlappingPrivateSession(coachId, sessionDate, startTime, end
   return rows.length > 0;
 }
 
+async function hasOverlappingCoachSession(coachId, sessionDate, startTime, endTime, excludeId = null) {
+  if (!coachId || !sessionDate || !startTime || !endTime) return false;
+
+  const params = [coachId, sessionDate, endTime, startTime];
+  let extraWhere = '';
+  if (excludeId) {
+    extraWhere = 'AND s.id <> ?';
+    params.push(excludeId);
+  }
+
+  const [rows] = await pool.query(
+    `
+      SELECT s.id
+      FROM sessions s
+      WHERE s.deleted_at IS NULL
+        AND s.coach_id = ?
+        AND s.session_date = ?
+        AND s.status <> 'cancelled'
+        AND NOT (s.end_time <= ? OR s.start_time >= ?)
+        ${extraWhere}
+      LIMIT 1
+    `,
+    params,
+  );
+  return rows.length > 0;
+}
+
+async function listCoachSessionsForDate(coachId, sessionDate) {
+  if (!coachId || !sessionDate) return [];
+  const [rows] = await pool.query(
+    `
+      SELECT id, start_time, end_time, status, is_private
+      FROM sessions
+      WHERE coach_id = ?
+        AND session_date = ?
+        AND deleted_at IS NULL
+        AND status <> 'cancelled'
+      ORDER BY start_time ASC
+    `,
+    [coachId, sessionDate],
+  );
+  return rows;
+}
+
+async function userExists(userId) {
+  const [rows] = await pool.query(
+    `
+      SELECT id
+      FROM users
+      WHERE id = ?
+        AND deleted_at IS NULL
+        AND is_active = 1
+      LIMIT 1
+    `,
+    [userId],
+  );
+  return rows.length > 0;
+}
+
+async function gymExists(gymId) {
+  const [rows] = await pool.query(
+    `
+      SELECT id
+      FROM gyms
+      WHERE id = ?
+        AND deleted_at IS NULL
+        AND is_active = 1
+      LIMIT 1
+    `,
+    [gymId],
+  );
+  return rows.length > 0;
+}
+
+async function coachBelongsToGym(coachId, gymId) {
+  if (!coachId || !gymId) return false;
+  const [rows] = await pool.query(
+    `
+      SELECT id
+      FROM coaches
+      WHERE id = ?
+        AND gym_id = ?
+        AND deleted_at IS NULL
+        AND is_active = 1
+      LIMIT 1
+    `,
+    [coachId, gymId],
+  );
+  return rows.length > 0;
+}
+
 async function softDelete(id) {
   const [result] = await pool.query(
     'UPDATE sessions SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL',
@@ -197,4 +288,16 @@ async function softDelete(id) {
   return result.affectedRows > 0;
 }
 
-module.exports = { list, findById, create, update, softDelete, hasOverlappingPrivateSession };
+module.exports = {
+  list,
+  findById,
+  create,
+  update,
+  softDelete,
+  hasOverlappingPrivateSession,
+  hasOverlappingCoachSession,
+  listCoachSessionsForDate,
+  userExists,
+  gymExists,
+  coachBelongsToGym,
+};

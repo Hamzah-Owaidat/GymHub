@@ -5,7 +5,11 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getGymDetails } from "@/lib/api/userGyms";
 import { createUserSubscription } from "@/lib/api/userSubscriptions";
-import { bookSession } from "@/lib/api/userSessions";
+import {
+  bookSession,
+  getCoachDateAvailability,
+  type CoachDateAvailabilityResponse,
+} from "@/lib/api/userSessions";
 import { rateGym, getGymRatings, type GymRating } from "@/lib/api/userRatings";
 import { useToast } from "@/context/ToastContext";
 import { useAuthStore } from "@/store/authStore";
@@ -25,6 +29,28 @@ function resolveImg(url: string): string {
 }
 
 type PaymentMethod = "cash" | "card";
+
+function toMinutes(time: string): number | null {
+  const [h, m] = time.split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+function minuteToTime(minute: number): string {
+  const h = Math.floor(minute / 60);
+  const m = minute % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function formatDateIso(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+const WEEK_DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
+const WEEK_DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 export default function GymDetailsPage() {
   const params = useParams();
@@ -59,6 +85,12 @@ export default function GymDetailsPage() {
   const [bookPayMethod, setBookPayMethod] = useState<PaymentMethod>("cash");
   const [bookCardLast4, setBookCardLast4] = useState("");
   const [bookingSaving, setBookingSaving] = useState(false);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityInfo, setAvailabilityInfo] = useState<CoachDateAvailabilityResponse | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
 
   // Rating state
   const [userRating, setUserRating] = useState<number>(0);
@@ -67,6 +99,67 @@ export default function GymDetailsPage() {
   const [ratingAvg, setRatingAvg] = useState<number>(0);
   const [ratingCount, setRatingCount] = useState<number>(0);
   const [reviews, setReviews] = useState<GymRating[]>([]);
+
+  const availableStartOptions = (() => {
+    if (!availabilityInfo) return [];
+    const options: string[] = [];
+    for (const window of availabilityInfo.available_windows || []) {
+      const start = toMinutes(window.start_time);
+      const end = toMinutes(window.end_time);
+      if (start === null || end === null) continue;
+      for (let current = start; current + 30 <= end; current += 30) {
+        options.push(minuteToTime(current));
+      }
+    }
+    return Array.from(new Set(options));
+  })();
+
+  const availableEndOptions = (() => {
+    if (!availabilityInfo || !bookStart) return [];
+    const startMinute = toMinutes(bookStart);
+    if (startMinute === null) return [];
+    const options: string[] = [];
+    for (const window of availabilityInfo.available_windows || []) {
+      const windowStart = toMinutes(window.start_time);
+      const windowEnd = toMinutes(window.end_time);
+      if (windowStart === null || windowEnd === null) continue;
+      if (startMinute < windowStart || startMinute >= windowEnd) continue;
+      for (let current = startMinute + 30; current <= windowEnd; current += 30) {
+        options.push(minuteToTime(current));
+      }
+    }
+    return Array.from(new Set(options));
+  })();
+
+  const selectedCoach = coaches.find((c) => c.id === bookCoachId) || null;
+  const coachAvailableDays = new Set<string>(
+    (selectedCoach?.availability || []).map((slot: any) => String(slot.day || "").toLowerCase()),
+  );
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayIso = formatDateIso(todayStart);
+  const monthStartDay = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
+  const monthDaysCount = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate();
+  const monthStartOffset = monthStartDay.getDay();
+  const calendarCells: Array<{ date: Date | null }> = [];
+  for (let i = 0; i < monthStartOffset; i += 1) calendarCells.push({ date: null });
+  for (let day = 1; day <= monthDaysCount; day += 1) {
+    calendarCells.push({ date: new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day) });
+  }
+  while (calendarCells.length % 7 !== 0) calendarCells.push({ date: null });
+
+  useEffect(() => {
+    if (!bookCoachId) {
+      setBookDate("");
+      setCalendarMonth(new Date(todayStart.getFullYear(), todayStart.getMonth(), 1));
+      return;
+    }
+    if (!bookDate) return;
+    const selectedDate = new Date(`${bookDate}T00:00:00`);
+    if (!Number.isNaN(selectedDate.getTime())) {
+      setCalendarMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
+    }
+  }, [bookCoachId, bookDate]);
 
   useEffect(() => {
     if (!gymId || Number.isNaN(gymId)) return;
@@ -94,6 +187,43 @@ export default function GymDetailsPage() {
     })();
   }, [gymId, showError]);
 
+  useEffect(() => {
+    setBookStart("");
+    setBookEnd("");
+    setAvailabilityInfo(null);
+
+    if (!showBooking || !bookCoachId || !bookDate) return;
+
+    (async () => {
+      setAvailabilityLoading(true);
+      try {
+        const res = await getCoachDateAvailability(bookCoachId, {
+          gym_id: gymId,
+          date: bookDate,
+        });
+        setAvailabilityInfo(res);
+      } catch (e: unknown) {
+        setAvailabilityInfo(null);
+        showError(e instanceof Error ? e.message : "Failed to load coach availability");
+      } finally {
+        setAvailabilityLoading(false);
+      }
+    })();
+  }, [showBooking, bookCoachId, bookDate, gymId, showError]);
+
+  useEffect(() => {
+    if (bookStart && !availableStartOptions.includes(bookStart)) {
+      setBookStart("");
+      setBookEnd("");
+    }
+  }, [bookStart, availableStartOptions]);
+
+  useEffect(() => {
+    if (bookEnd && !availableEndOptions.includes(bookEnd)) {
+      setBookEnd("");
+    }
+  }, [bookEnd, availableEndOptions]);
+
   const handleSubscribe = async () => {
     if (!subscribePlanId) { showError("Please select a plan first."); return; }
     setSavingSub(true);
@@ -117,6 +247,14 @@ export default function GymDetailsPage() {
     if (!bookCoachId || !bookDate || !bookStart || !bookEnd) {
       showError("Please fill all booking fields."); return;
     }
+    if (!availabilityInfo) {
+      showError("Please select coach and date, then choose from available time slots.");
+      return;
+    }
+    if (!availableStartOptions.includes(bookStart) || !availableEndOptions.includes(bookEnd)) {
+      showError("Please select a valid available time range.");
+      return;
+    }
     setBookingSaving(true);
     try {
       const res = await bookSession({
@@ -135,6 +273,7 @@ export default function GymDetailsPage() {
       }
       setShowBooking(false);
       setBookCoachId(null); setBookDate(""); setBookStart(""); setBookEnd("");
+      setAvailabilityInfo(null);
     } catch (e: unknown) {
       showError(e instanceof Error ? e.message : "Failed to book session");
     } finally { setBookingSaving(false); }
@@ -352,20 +491,182 @@ export default function GymDetailsPage() {
                     </div>
                     <div>
                       <label className="mb-1.5 block text-xs font-medium text-stone-600 dark:text-stone-400">Date</label>
-                      <input type="date" value={bookDate} onChange={(e) => setBookDate(e.target.value)}
+                      <input
+                        type="date"
+                        value={bookDate}
+                        min={todayIso}
+                        onChange={(e) => setBookDate(e.target.value)}
                         className="h-10 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" />
                     </div>
                     <div>
                       <label className="mb-1.5 block text-xs font-medium text-stone-600 dark:text-stone-400">Start Time</label>
-                      <input type="time" value={bookStart} onChange={(e) => setBookStart(e.target.value)}
-                        className="h-10 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" />
+                      <select
+                        value={bookStart}
+                        onChange={(e) => {
+                          setBookStart(e.target.value);
+                          setBookEnd("");
+                        }}
+                        disabled={!availabilityInfo || availabilityLoading || availableStartOptions.length === 0}
+                        className="h-10 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100"
+                      >
+                        <option value="">
+                          {availabilityLoading
+                            ? "Loading..."
+                            : !bookCoachId || !bookDate
+                            ? "Select coach and date first"
+                            : availableStartOptions.length
+                            ? "Select start time"
+                            : "No available times"}
+                        </option>
+                        {availableStartOptions.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="mb-1.5 block text-xs font-medium text-stone-600 dark:text-stone-400">End Time</label>
-                      <input type="time" value={bookEnd} onChange={(e) => setBookEnd(e.target.value)}
-                        className="h-10 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" />
+                      <select
+                        value={bookEnd}
+                        onChange={(e) => setBookEnd(e.target.value)}
+                        disabled={!bookStart || availabilityLoading || availableEndOptions.length === 0}
+                        className="h-10 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100"
+                      >
+                        <option value="">
+                          {!bookStart
+                            ? "Select start time first"
+                            : availableEndOptions.length
+                            ? "Select end time"
+                            : "No valid end times"}
+                        </option>
+                        {availableEndOptions.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
+
+                  <div className="mt-4 rounded-xl border border-stone-200 bg-white/70 p-3 dark:border-stone-700 dark:bg-stone-900/70">
+                    <div className="mb-3 flex items-center justify-between">
+                      <p className="text-xs font-semibold text-stone-700 dark:text-stone-200">
+                        Pick date from coach availability
+                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCalendarMonth(
+                              (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1),
+                            )
+                          }
+                          className="rounded-md border border-stone-200 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
+                        >
+                          Prev
+                        </button>
+                        <span className="min-w-[110px] text-center text-xs font-medium text-stone-700 dark:text-stone-200">
+                          {calendarMonth.toLocaleString("en-US", { month: "long", year: "numeric" })}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCalendarMonth(
+                              (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1),
+                            )
+                          }
+                          className="rounded-md border border-stone-200 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-1">
+                      {WEEK_DAY_LABELS.map((label) => (
+                        <div
+                          key={label}
+                          className="py-1 text-center text-[11px] font-semibold text-stone-500 dark:text-stone-400"
+                        >
+                          {label}
+                        </div>
+                      ))}
+                      {calendarCells.map((cell, idx) => {
+                        if (!cell.date) {
+                          return <div key={`empty-${idx}`} className="h-8" />;
+                        }
+
+                        const iso = formatDateIso(cell.date);
+                        const dayName = WEEK_DAYS[cell.date.getDay()];
+                        const isPast = cell.date < todayStart;
+                        const isAvailableDay = coachAvailableDays.has(dayName);
+                        const isSelectable = !!bookCoachId && isAvailableDay && !isPast;
+                        const isSelected = bookDate === iso;
+
+                        return (
+                          <button
+                            key={iso}
+                            type="button"
+                            disabled={!isSelectable}
+                            onClick={() => {
+                              setBookDate(iso);
+                              setBookStart("");
+                              setBookEnd("");
+                            }}
+                            className={`h-8 rounded-md text-xs transition ${
+                              isSelected
+                                ? "bg-brand-500 text-white"
+                                : isSelectable
+                                ? "bg-orange-500/15 text-orange-600 hover:bg-orange-500/25 dark:text-orange-300"
+                                : "text-stone-400 dark:text-stone-600"
+                            } ${!isSelectable ? "cursor-not-allowed" : ""}`}
+                          >
+                            {cell.date.getDate()}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-2 flex items-center gap-3 text-[11px] text-stone-500 dark:text-stone-400">
+                      <span className="inline-flex items-center gap-1">
+                        <span className="h-2.5 w-2.5 rounded bg-orange-500/40" />
+                        Coach available day
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <span className="h-2.5 w-2.5 rounded bg-brand-500" />
+                        Selected date
+                      </span>
+                    </div>
+                  </div>
+
+                  {availabilityInfo && (
+                    <div className="mt-4 rounded-xl border border-stone-200 bg-white/70 p-3 dark:border-stone-700 dark:bg-stone-900/70">
+                      <p className="text-xs font-semibold text-stone-700 dark:text-stone-200">
+                        Availability on {availabilityInfo.day}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {availabilityInfo.available_windows.length > 0 ? (
+                          availabilityInfo.available_windows.map((w, idx) => (
+                            <span
+                              key={`${w.start_time}-${w.end_time}-${idx}`}
+                              className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+                            >
+                              {w.start_time} - {w.end_time}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-red-500">
+                            No free time windows for this date.
+                          </span>
+                        )}
+                      </div>
+                      {availabilityInfo.suggested_slots.length > 0 && (
+                        <p className="mt-2 text-[11px] text-stone-500 dark:text-stone-400">
+                          Suggested 60-minute slots are auto-calculated from coach availability.
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {!activeSub && (
                     <div className="mt-4">

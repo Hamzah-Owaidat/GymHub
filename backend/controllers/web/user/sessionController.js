@@ -5,6 +5,110 @@ const UserSubscription = require('../../../models/UserSubscription');
 const Payment = require('../../../models/Payment');
 const AppError = require('../../../utils/AppError');
 
+const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+function normalizeTime(value) {
+  const raw = (value || '').toString().trim();
+  const match = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return null;
+  const h = Number(match[1]);
+  const m = Number(match[2]);
+  if (Number.isNaN(h) || Number.isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function toMinutes(time) {
+  const normalized = normalizeTime(time);
+  if (!normalized) return null;
+  const [h, m] = normalized.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function minuteToTime(minute) {
+  const h = Math.floor(minute / 60);
+  const m = minute % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function subtractBusyFromWindows(windows, busyIntervals) {
+  let free = [...windows];
+  for (const busy of busyIntervals) {
+    const next = [];
+    for (const w of free) {
+      if (busy.end <= w.start || busy.start >= w.end) {
+        next.push(w);
+        continue;
+      }
+      if (busy.start > w.start) next.push({ start: w.start, end: busy.start });
+      if (busy.end < w.end) next.push({ start: busy.end, end: w.end });
+    }
+    free = next;
+  }
+  return free.filter((w) => w.end > w.start);
+}
+
+async function buildCoachAvailabilityForDate(coachId, sessionDate) {
+  const date = new Date(`${sessionDate}T00:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    throw new AppError('Invalid session_date', 400);
+  }
+
+  const dayName = DAYS[date.getDay()];
+  const allAvailability = await Coach.getAvailability(coachId);
+  const daySlots = allAvailability
+    .filter((slot) => slot.day === dayName)
+    .map((slot) => ({
+      start: toMinutes(slot.start_time),
+      end: toMinutes(slot.end_time),
+      is_private: !!slot.is_private,
+    }))
+    .filter((slot) => slot.start !== null && slot.end !== null && slot.end > slot.start);
+
+  const busyRows = await Session.listCoachSessionsForDate(coachId, sessionDate);
+  const busyIntervals = busyRows
+    .map((row) => ({
+      start: toMinutes(row.start_time),
+      end: toMinutes(row.end_time),
+      status: row.status,
+    }))
+    .filter((row) => row.start !== null && row.end !== null && row.end > row.start)
+    .map((row) => ({ start: row.start, end: row.end, status: row.status }));
+
+  const freeIntervals = subtractBusyFromWindows(
+    daySlots.map((slot) => ({ start: slot.start, end: slot.end })),
+    busyIntervals,
+  );
+
+  const suggestedSlots = [];
+  for (const interval of freeIntervals) {
+    for (let start = interval.start; start + 60 <= interval.end; start += 30) {
+      suggestedSlots.push({
+        start_time: minuteToTime(start),
+        end_time: minuteToTime(start + 60),
+        duration_minutes: 60,
+      });
+    }
+  }
+
+  return {
+    day: dayName,
+    slot_windows: daySlots.map((slot) => ({
+      start_time: minuteToTime(slot.start),
+      end_time: minuteToTime(slot.end),
+      is_private: slot.is_private,
+    })),
+    busy_windows: busyIntervals.map((slot) => ({
+      start_time: minuteToTime(slot.start),
+      end_time: minuteToTime(slot.end),
+    })),
+    available_windows: freeIntervals.map((slot) => ({
+      start_time: minuteToTime(slot.start),
+      end_time: minuteToTime(slot.end),
+    })),
+    suggested_slots: suggestedSlots,
+  };
+}
+
 async function list(req, res, next) {
   try {
     const userId = req.user && req.user.id;
@@ -18,6 +122,36 @@ async function list(req, res, next) {
 
     const result = await Session.list({ page, limit, sortBy, sortDir, user_id: userId, status });
     res.json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getCoachAvailability(req, res, next) {
+  try {
+    const coachId = Number(req.params.coachId);
+    const gymId = Number(req.query.gym_id);
+    const sessionDate = req.query.date;
+
+    if (!coachId) return next(new AppError('coachId is required', 400));
+    if (!gymId) return next(new AppError('gym_id is required', 400));
+    if (!sessionDate) return next(new AppError('date is required', 400));
+
+    const gym = await Gym.findById(gymId);
+    if (!gym || !gym.is_active) return next(new AppError('Gym not found', 404));
+
+    const coach = await Coach.findById(coachId);
+    if (!coach || !coach.is_active) return next(new AppError('Coach not found', 404));
+    if (coach.gym_id !== gymId) return next(new AppError('Coach does not belong to this gym', 400));
+
+    const availability = await buildCoachAvailabilityForDate(coachId, sessionDate);
+    res.json({
+      success: true,
+      coach_id: coachId,
+      gym_id: gymId,
+      date: sessionDate,
+      ...availability,
+    });
   } catch (err) {
     next(err);
   }
@@ -43,7 +177,25 @@ async function book(req, res, next) {
     if (!coach || !coach.is_active) return next(new AppError('Coach not found', 404));
     if (coach.gym_id !== Number(gym_id)) return next(new AppError('Coach does not belong to this gym', 400));
 
-    const overlap = await Session.hasOverlappingPrivateSession(
+    const normalizedStart = normalizeTime(start_time);
+    const normalizedEnd = normalizeTime(end_time);
+    if (!normalizedStart || !normalizedEnd) {
+      return next(new AppError('Invalid start_time or end_time format', 400));
+    }
+
+    const availability = await buildCoachAvailabilityForDate(Number(coach_id), session_date);
+    const requestedStart = toMinutes(normalizedStart);
+    const requestedEnd = toMinutes(normalizedEnd);
+    const insideAvailability = availability.available_windows.some((window) => {
+      const windowStart = toMinutes(window.start_time);
+      const windowEnd = toMinutes(window.end_time);
+      return windowStart !== null && windowEnd !== null && requestedStart >= windowStart && requestedEnd <= windowEnd;
+    });
+    if (!insideAvailability) {
+      return next(new AppError('Selected time is outside coach availability for this date', 409));
+    }
+
+    const overlap = await Session.hasOverlappingCoachSession(
       Number(coach_id), session_date, start_time, end_time,
     );
     if (overlap) return next(new AppError('Coach is not available at that time (overlapping session)', 409));
@@ -102,4 +254,4 @@ async function book(req, res, next) {
   }
 }
 
-module.exports = { list, book };
+module.exports = { list, getCoachAvailability, book };

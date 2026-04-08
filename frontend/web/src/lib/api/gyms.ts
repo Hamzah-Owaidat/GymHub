@@ -12,6 +12,7 @@ export type Gym = {
   working_days: string | null;
   phone: string | null;
   email: string | null;
+  session_price: number | null;
   owner_id: number;
   owner_first_name?: string;
   owner_last_name?: string;

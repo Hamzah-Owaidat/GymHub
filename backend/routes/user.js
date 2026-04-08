@@ -20,6 +20,7 @@ router.get('/subscriptions', subscriptionController.list);
 router.post('/subscriptions', subscriptionController.create);
 
 router.get('/sessions', userSessionController.list);
+router.get('/coaches/:coachId/availability', userSessionController.getCoachAvailability);
 router.post('/sessions/book', userSessionController.book);
 
 router.get('/gyms/:gymId/my-rating', ratingController.getMyRating);

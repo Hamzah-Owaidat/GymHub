@@ -50,6 +50,7 @@ const emptyForm = {
 };
 
 export default function SessionsPage() {
+  const userRole = useAuthStore((s) => s.user?.role);
   const [data, setData] = useState<Session[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 5, total: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
@@ -72,6 +73,10 @@ export default function SessionsPage() {
   const [form, setForm] = useState({ ...emptyForm });
 
   const { error: showError, success: showSuccess } = useToast();
+  const selectedGymId = form.gym_id ? Number(form.gym_id) : null;
+  const filteredCoaches = selectedGymId
+    ? coaches.filter((coach) => coach.gym_id === selectedGymId)
+    : [];
 
   const loadGyms = async () => {
     if (gymsLoaded) return;
@@ -97,8 +102,10 @@ export default function SessionsPage() {
 
   const loadUsers = async () => {
     if (usersLoaded) return;
-    const role = useAuthStore.getState().user?.role;
-    if (role !== "admin") { setUsersLoaded(true); return; }
+    if (userRole !== "admin") {
+      setUsersLoaded(true);
+      return;
+    }
     try {
       const res = await getUsers({ page: 1, limit: 1000, is_active: true });
       setUsers(res.data as User[]);
@@ -150,9 +157,54 @@ export default function SessionsPage() {
     loadGyms();
     loadCoaches();
     loadUsers();
-  }, []);
+  }, [userRole]);
 
   const resetForm = () => setForm({ ...emptyForm });
+
+  const setGymAndSyncCoach = (gymId: string) => {
+    setForm((prev) => {
+      const nextGymId = gymId ? Number(gymId) : null;
+      const currentCoachId = prev.coach_id ? Number(prev.coach_id) : null;
+      const coachStillValid =
+        nextGymId &&
+        currentCoachId &&
+        coaches.some((coach) => coach.id === currentCoachId && coach.gym_id === nextGymId);
+
+      const fallbackGymPrice =
+        nextGymId
+          ? gyms.find((gym) => gym.id === nextGymId)?.session_price
+          : null;
+
+      return {
+        ...prev,
+        gym_id: gymId,
+        coach_id: coachStillValid ? prev.coach_id : "",
+        price:
+          prev.price ||
+          (fallbackGymPrice !== null && fallbackGymPrice !== undefined
+            ? String(fallbackGymPrice)
+            : ""),
+      };
+    });
+  };
+
+  const setCoachAndSyncPrice = (coachId: string) => {
+    setForm((prev) => {
+      const coach = coachId ? coaches.find((c) => c.id === Number(coachId)) : null;
+      const gym = prev.gym_id ? gyms.find((g) => g.id === Number(prev.gym_id)) : null;
+      const suggestedPrice =
+        coach?.price_per_session ?? gym?.session_price ?? null;
+
+      return {
+        ...prev,
+        coach_id: coachId,
+        price:
+          suggestedPrice !== null && suggestedPrice !== undefined
+            ? String(suggestedPrice)
+            : prev.price,
+      };
+    });
+  };
 
   const openCreateModal = () => {
     resetForm();
@@ -217,8 +269,27 @@ export default function SessionsPage() {
       showError("Session date is required.");
       return;
     }
+    if (!form.coach_id) {
+      showError("Coach is required.");
+      return;
+    }
     if (!form.start_time || !form.end_time) {
       showError("Start time and end time are required.");
+      return;
+    }
+    if (form.start_time >= form.end_time) {
+      showError("Start time must be before end time.");
+      return;
+    }
+    if (
+      form.gym_id &&
+      form.coach_id &&
+      !coaches.some(
+        (coach) =>
+          coach.id === Number(form.coach_id) && coach.gym_id === Number(form.gym_id),
+      )
+    ) {
+      showError("Selected coach does not belong to selected gym.");
       return;
     }
 
@@ -227,7 +298,7 @@ export default function SessionsPage() {
       const payload = {
         user_id: Number(form.user_id),
         gym_id: Number(form.gym_id),
-        coach_id: form.coach_id ? Number(form.coach_id) : null,
+        coach_id: Number(form.coach_id),
         session_date: form.session_date.slice(0, 10),
         start_time: form.start_time,
         end_time: form.end_time,
@@ -534,31 +605,60 @@ export default function SessionsPage() {
                     </span>
                   </div>
                 </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                    Visibility
+                  </p>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                      selectedSession.is_private
+                        ? "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"
+                        : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                    }`}
+                  >
+                    {selectedSession.is_private ? "Private session" : "Public session"}
+                  </span>
+                </div>
               </div>
             </div>
           ) : (
             <form className="mt-6 space-y-6 px-1" onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <Label>User</Label>
-                  <select
-                    value={form.user_id}
-                    onChange={(e) => setForm((f) => ({ ...f, user_id: e.target.value }))}
-                    className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
-                  >
-                    <option value="">Select user</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.first_name} {u.last_name} ({u.email})
-                      </option>
-                    ))}
-                  </select>
+                  <Label>{userRole === "admin" ? "User" : "User ID"}</Label>
+                  {userRole === "admin" ? (
+                    <select
+                      value={form.user_id}
+                      onChange={(e) => setForm((f) => ({ ...f, user_id: e.target.value }))}
+                      className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                    >
+                      <option value="">Select user</option>
+                      {users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.first_name} {u.last_name} ({u.email})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <>
+                      <Input
+                        type="number"
+                        value={form.user_id}
+                        onChange={(e) => setForm((f) => ({ ...f, user_id: e.target.value }))}
+                        placeholder="Enter customer user ID"
+                        min={1}
+                      />
+                      <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+                        Enter the booked user ID. The backend validates that this user exists and is active.
+                      </p>
+                    </>
+                  )}
                 </div>
                 <div>
                   <Label>Gym</Label>
                   <select
                     value={form.gym_id}
-                    onChange={(e) => setForm((f) => ({ ...f, gym_id: e.target.value }))}
+                    onChange={(e) => setGymAndSyncCoach(e.target.value)}
                     className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
                   >
                     <option value="">Select gym</option>
@@ -573,19 +673,24 @@ export default function SessionsPage() {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <Label>Coach (optional)</Label>
+                  <Label>Coach</Label>
                   <select
                     value={form.coach_id}
-                    onChange={(e) => setForm((f) => ({ ...f, coach_id: e.target.value }))}
+                    onChange={(e) => setCoachAndSyncPrice(e.target.value)}
                     className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
                   >
-                    <option value="">No coach</option>
-                    {coaches.map((c) => (
+                    <option value="">
+                      {form.gym_id ? "Select coach" : "Select gym first"}
+                    </option>
+                    {filteredCoaches.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.user_first_name} {c.user_last_name}
                       </option>
                     ))}
                   </select>
+                  <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+                    Only coaches from the selected gym are available.
+                  </p>
                 </div>
                 <div>
                   <Label>Session Date</Label>

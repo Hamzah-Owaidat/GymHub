@@ -42,6 +42,29 @@ export type BookSessionResponse = {
   amount_charged: number;
 };
 
+export type CoachDateAvailabilityResponse = {
+  success: boolean;
+  coach_id: number;
+  gym_id: number;
+  date: string;
+  day: string;
+  slot_windows: { start_time: string; end_time: string; is_private: boolean }[];
+  busy_windows: { start_time: string; end_time: string }[];
+  available_windows: { start_time: string; end_time: string }[];
+  suggested_slots: { start_time: string; end_time: string; duration_minutes: number }[];
+};
+
+export async function getCoachDateAvailability(
+  coachId: number,
+  params: { gym_id: number; date: string },
+) {
+  const res = await apiClient.get<CoachDateAvailabilityResponse>(
+    `${BASE}/coaches/${coachId}/availability`,
+    { params },
+  );
+  return res.data;
+}
+
 export async function bookSession(body: BookSessionBody) {
   const res = await apiClient.post<BookSessionResponse>(`${BASE}/sessions/book`, body);
   return res.data;

@@ -60,6 +60,23 @@ async function create(req, res, next) {
     }
 
     const safeStatus = status && isValidSessionStatus(status) ? status : 'booked';
+    const parsedUserId = Number(user_id);
+    const parsedGymId = Number(gym_id);
+    const parsedCoachId = coach_id ? Number(coach_id) : null;
+
+    if (!(await Session.userExists(parsedUserId))) {
+      return next(new AppError('Selected user does not exist or is inactive', 400));
+    }
+    if (!(await Session.gymExists(parsedGymId))) {
+      return next(new AppError('Selected gym does not exist or is inactive', 400));
+    }
+    if (parsedCoachId) {
+      const coachInGym = await Session.coachBelongsToGym(parsedCoachId, parsedGymId);
+      if (!coachInGym) {
+        return next(new AppError('Selected coach is not active in the selected gym', 400));
+      }
+    }
+
     const isPrivate =
       is_private === true ||
       is_private === 'true' ||
@@ -68,7 +85,7 @@ async function create(req, res, next) {
 
     if (coach_id) {
       const hasConflict = await Session.hasOverlappingPrivateSession(
-        Number(coach_id),
+        parsedCoachId,
         session_date,
         start_time,
         end_time,
@@ -80,9 +97,9 @@ async function create(req, res, next) {
     }
 
     const id = await Session.create({
-      user_id: Number(user_id),
-      gym_id: Number(gym_id),
-      coach_id: coach_id ? Number(coach_id) : null,
+      user_id: parsedUserId,
+      gym_id: parsedGymId,
+      coach_id: parsedCoachId,
       session_date,
       start_time,
       end_time,
@@ -102,10 +119,11 @@ async function update(req, res, next) {
   try {
     const id = Number(req.params.id);
     if (!id) return next(new AppError('Invalid session id', 400));
+    const existing = await Session.findById(id);
+    if (!existing) return next(new AppError('Session not found', 404));
 
     if (req.ownerGymIds) {
-      const existing = await Session.findById(id);
-      if (!existing || !req.ownerGymIds.includes(existing.gym_id)) {
+      if (!req.ownerGymIds.includes(existing.gym_id)) {
         return next(new AppError('Session not in your gyms', 403));
       }
     }
@@ -135,11 +153,26 @@ async function update(req, res, next) {
 
     const effectiveCoachId =
       coach_id !== undefined ? (coach_id ? Number(coach_id) : null) : existing.coach_id;
+    const effectiveGymId = gym_id !== undefined ? Number(gym_id) : existing.gym_id;
+    const effectiveUserId = user_id !== undefined ? Number(user_id) : existing.user_id;
     const effectiveDate = session_date !== undefined ? session_date : existing.session_date;
     const effectiveStart = data.start_time || existing.start_time;
     const effectiveEnd = data.end_time || existing.end_time;
     const effectiveIsPrivate =
       data.is_private !== undefined ? data.is_private : existing.is_private === 1;
+
+    if (!(await Session.userExists(effectiveUserId))) {
+      return next(new AppError('Selected user does not exist or is inactive', 400));
+    }
+    if (!(await Session.gymExists(effectiveGymId))) {
+      return next(new AppError('Selected gym does not exist or is inactive', 400));
+    }
+    if (effectiveCoachId) {
+      const coachInGym = await Session.coachBelongsToGym(Number(effectiveCoachId), Number(effectiveGymId));
+      if (!coachInGym) {
+        return next(new AppError('Selected coach is not active in the selected gym', 400));
+      }
+    }
 
     if (effectiveCoachId && effectiveIsPrivate) {
       const hasConflict = await Session.hasOverlappingPrivateSession(
