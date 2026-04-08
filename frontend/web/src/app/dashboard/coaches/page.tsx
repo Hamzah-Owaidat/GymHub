@@ -173,6 +173,7 @@ export default function CoachesPage() {
     specialization: "",
     bio: "",
     price_per_session: "",
+    gym_share_percentage: "0",
     is_active: true,
   });
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
@@ -184,6 +185,7 @@ export default function CoachesPage() {
       specialization: "",
       bio: "",
       price_per_session: "",
+      gym_share_percentage: "0",
       is_active: true,
     });
     setAvailabilitySlots([]);
@@ -224,6 +226,10 @@ export default function CoachesPage() {
         coach.price_per_session !== null && coach.price_per_session !== undefined
           ? String(coach.price_per_session)
           : "",
+      gym_share_percentage:
+        coach.gym_share_percentage !== null && coach.gym_share_percentage !== undefined
+          ? String(coach.gym_share_percentage)
+          : "0",
       is_active: coach.is_active,
     });
     setAvailabilitySlots(
@@ -267,6 +273,11 @@ export default function CoachesPage() {
       showError("Coach user and gym are required.");
       return;
     }
+    const sharePct = Number(form.gym_share_percentage || "0");
+    if (Number.isNaN(sharePct) || sharePct < 0 || sharePct > 100) {
+      showError("Gym share % must be between 0 and 100.");
+      return;
+    }
 
     const availabilityValidationError = validateAvailabilitySlots(availabilitySlots);
     if (availabilityValidationError) {
@@ -284,6 +295,7 @@ export default function CoachesPage() {
         price_per_session: form.price_per_session
           ? Number(form.price_per_session)
           : undefined,
+        gym_share_percentage: sharePct,
         is_active: form.is_active,
         availability: availabilitySlots.map((s) => ({
           day: s.day,
@@ -464,6 +476,9 @@ export default function CoachesPage() {
                     Price / session
                   </th>
                   <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">
+                    Gym share
+                  </th>
+                  <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">
                     Availability
                   </th>
                   <th className="px-4 py-3 font-medium text-stone-800 dark:text-stone-100">
@@ -496,6 +511,9 @@ export default function CoachesPage() {
                     </td>
                     <td className="px-4 py-3 text-stone-600 dark:text-stone-300">
                       {row.price_per_session != null ? `$${formatPrice(row.price_per_session)}` : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-stone-600 dark:text-stone-300">
+                      {row.gym_share_percentage != null ? `${Number(row.gym_share_percentage).toFixed(2)}%` : "0%"}
                     </td>
                     <td className="px-4 py-3 text-stone-600 dark:text-stone-300">
                       {row.availability && row.availability.length > 0 ? (
@@ -629,6 +647,16 @@ export default function CoachesPage() {
                         : "—"}
                     </p>
                   </div>
+                  <div>
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                      Gym share
+                    </p>
+                    <p className="text-sm text-stone-900 dark:text-stone-50">
+                      {selectedCoach.gym_share_percentage != null
+                        ? `${Number(selectedCoach.gym_share_percentage).toFixed(2)}%`
+                        : "0%"}
+                    </p>
+                  </div>
                 </div>
                 <div>
                   <p className="mb-1 text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">
@@ -739,6 +767,18 @@ export default function CoachesPage() {
                     onChange={(e) => setForm((f) => ({ ...f, price_per_session: e.target.value }))}
                     placeholder="e.g. 25"
                     min={0}
+                    step="0.01"
+                  />
+                </div>
+                <div>
+                  <Label>Gym share %</Label>
+                  <Input
+                    type="number"
+                    value={form.gym_share_percentage}
+                    onChange={(e) => setForm((f) => ({ ...f, gym_share_percentage: e.target.value }))}
+                    placeholder="e.g. 50"
+                    min={0}
+                    max={100}
                     step="0.01"
                   />
                 </div>

@@ -30,6 +30,16 @@ async function create(req, res, next) {
     if (!userId) return next(new AppError('Authentication required', 401));
 
     const { plan_id, payment_method, card_last4 } = req.body || {};
+    if (payment_method !== 'cash' && payment_method !== 'card') {
+      return next(new AppError('payment_method must be cash or card', 400));
+    }
+    if (payment_method === 'card') {
+      const last4 = (card_last4 || '').toString().trim();
+      if (!/^\d{4}$/.test(last4)) {
+        return next(new AppError('card_last4 must be exactly 4 digits for card payments', 400));
+      }
+    }
+
     const planIdNum = Number(plan_id);
     if (!planIdNum || Number.isNaN(planIdNum)) {
       return next(new AppError('plan_id is required', 400));
@@ -56,7 +66,7 @@ async function create(req, res, next) {
       status: 'active',
     });
 
-    const method = payment_method === 'card' ? 'card' : 'cash';
+    const method = payment_method;
     const status = method === 'cash' ? 'paid' : 'paid';
     const amount = plan.price;
 

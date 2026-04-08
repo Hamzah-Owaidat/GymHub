@@ -20,6 +20,7 @@ export type Coach = {
   specialization: string | null;
   bio: string | null;
   price_per_session: number | null;
+  gym_share_percentage: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -64,6 +65,7 @@ export async function createCoach(body: {
   specialization?: string;
   bio?: string;
   price_per_session?: number;
+  gym_share_percentage?: number;
   is_active?: boolean;
   availability?: { day: string; start_time: string | null; end_time: string | null; slot_mode?: "private_only" | "public_only" | "both"; is_private?: boolean }[];
 }) {
@@ -79,6 +81,7 @@ export async function updateCoach(
     specialization: string;
     bio: string;
     price_per_session: number;
+    gym_share_percentage: number;
     is_active: boolean;
     availability: { day: string; start_time: string | null; end_time: string | null; slot_mode?: "private_only" | "public_only" | "both"; is_private?: boolean }[];
   }>,

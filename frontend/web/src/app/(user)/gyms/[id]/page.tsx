@@ -29,6 +29,7 @@ function resolveImg(url: string): string {
 }
 
 type PaymentMethod = "cash" | "card";
+type OptionalPaymentMethod = PaymentMethod | "";
 type SessionVisibility = "private" | "public";
 
 function toMinutes(time: string): number | null {
@@ -84,8 +85,11 @@ export default function GymDetailsPage() {
   const [bookStart, setBookStart] = useState("");
   const [bookEnd, setBookEnd] = useState("");
   const [bookVisibility, setBookVisibility] = useState<SessionVisibility>("private");
-  const [bookPayMethod, setBookPayMethod] = useState<PaymentMethod>("cash");
-  const [bookCardLast4, setBookCardLast4] = useState("");
+  const [bookPayMethod, setBookPayMethod] = useState<OptionalPaymentMethod>("");
+  const [bookCardName, setBookCardName] = useState("");
+  const [bookCardNumber, setBookCardNumber] = useState("");
+  const [bookCardExpiry, setBookCardExpiry] = useState("");
+  const [bookCardCvv, setBookCardCvv] = useState("");
   const [bookingSaving, setBookingSaving] = useState(false);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityInfo, setAvailabilityInfo] = useState<CoachDateAvailabilityResponse | null>(null);
@@ -101,6 +105,9 @@ export default function GymDetailsPage() {
   const [ratingAvg, setRatingAvg] = useState<number>(0);
   const [ratingCount, setRatingCount] = useState<number>(0);
   const [reviews, setReviews] = useState<GymRating[]>([]);
+  const bookingPaymentInvalid =
+    bookPayMethod === "" ||
+    (bookPayMethod === "card" && bookCardNumber.trim().length < 4);
 
   const availableStartOptions = (() => {
     if (!availabilityInfo) return [];
@@ -159,6 +166,14 @@ export default function GymDetailsPage() {
   })();
 
   const selectedCoach = coaches.find((c) => c.id === bookCoachId) || null;
+  const selectedCoachPrice = selectedCoach
+    ? Number(selectedCoach.price_per_session || 0)
+    : (gym?.session_price ? Number(gym.session_price) : 0);
+  const selectedCoachGymShare = selectedCoach
+    ? Number(selectedCoach.gym_share_percentage || 0)
+    : 0;
+  const gymShareAmount = +(selectedCoachPrice * selectedCoachGymShare / 100).toFixed(2);
+  const coachNetAmount = +(selectedCoachPrice - gymShareAmount).toFixed(2);
   const coachAvailableDays = new Set<string>(
     (selectedCoach?.availability || []).map((slot: any) => String(slot.day || "").toLowerCase()),
   );
@@ -261,6 +276,10 @@ export default function GymDetailsPage() {
 
   const handleSubscribe = async () => {
     if (!subscribePlanId) { showError("Please select a plan first."); return; }
+    if (paymentMethod === "card" && !/^\d{4}$/.test(cardNumber.trim().slice(-4))) {
+      showError("For card payments, enter a valid card number ending with 4 digits.");
+      return;
+    }
     setSavingSub(true);
     try {
       const body: { plan_id: number; payment_method: PaymentMethod; card_last4?: string } =
@@ -293,6 +312,14 @@ export default function GymDetailsPage() {
       showError("Please select a valid available time range.");
       return;
     }
+    if (bookPayMethod !== "cash" && bookPayMethod !== "card") {
+      showError("Please select payment method (cash or card) before confirming.");
+      return;
+    }
+    if (bookPayMethod === "card" && bookCardNumber.trim().length < 4) {
+      showError("For card payments, enter a valid card number.");
+      return;
+    }
     if (selectedWindowMode === "both" && !bookVisibility) {
       showError("Please choose session visibility (private/public).");
       return;
@@ -306,8 +333,8 @@ export default function GymDetailsPage() {
         start_time: bookStart,
         end_time: bookEnd,
         session_visibility: bookVisibility,
-        payment_method: !activeSub ? bookPayMethod : undefined,
-        card_last4: !activeSub && bookPayMethod === "card" ? bookCardLast4 : undefined,
+        payment_method: bookPayMethod as PaymentMethod,
+        card_last4: bookPayMethod === "card" ? bookCardNumber.trim().slice(-4) : undefined,
       });
       if (res.payment_required) {
         showSuccess(`Session booked! $${res.amount_charged.toFixed(2)} charged.`);
@@ -317,6 +344,8 @@ export default function GymDetailsPage() {
       setShowBooking(false);
       setBookCoachId(null); setBookDate(""); setBookStart(""); setBookEnd("");
       setBookVisibility("private");
+      setBookPayMethod("");
+      setBookCardName(""); setBookCardNumber(""); setBookCardExpiry(""); setBookCardCvv("");
       setAvailabilityInfo(null);
     } catch (e: unknown) {
       showError(e instanceof Error ? e.message : "Failed to book session");
@@ -466,7 +495,18 @@ export default function GymDetailsPage() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-bold text-stone-900 dark:text-white">Coaches</h2>
                   {isAuthenticated && coaches.length > 0 && (
-                    <button type="button" onClick={() => setShowBooking(!showBooking)}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowBooking((prev) => {
+                          const next = !prev;
+                          if (next) {
+                            setBookPayMethod("");
+                            setBookCardName(""); setBookCardNumber(""); setBookCardExpiry(""); setBookCardCvv("");
+                          }
+                          return next;
+                        });
+                      }}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-600">
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
                       Book a Session
@@ -761,30 +801,80 @@ export default function GymDetailsPage() {
                     </div>
                   )}
 
-                  {!activeSub && (
-                    <div className="mt-4">
-                      <label className="mb-1.5 block text-xs font-medium text-stone-600 dark:text-stone-400">Payment Method</label>
-                      <div className="flex gap-2">
-                        <button type="button" onClick={() => setBookPayMethod("cash")}
-                          className={`flex-1 rounded-xl border-2 px-3 py-2 text-xs font-medium transition ${bookPayMethod === "cash" ? "border-brand-500 bg-brand-50 text-brand-600 dark:bg-brand-950/30 dark:text-brand-400" : "border-stone-200 bg-white text-stone-600 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300"}`}>
-                          Cash
-                        </button>
-                        <button type="button" onClick={() => setBookPayMethod("card")}
-                          className={`flex-1 rounded-xl border-2 px-3 py-2 text-xs font-medium transition ${bookPayMethod === "card" ? "border-brand-500 bg-brand-50 text-brand-600 dark:bg-brand-950/30 dark:text-brand-400" : "border-stone-200 bg-white text-stone-600 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300"}`}>
-                          Card
-                        </button>
+                  {/* Price breakdown */}
+                  {selectedCoach && selectedCoachPrice > 0 && (
+                    <div className="mt-4 space-y-2">
+                      <div className="rounded-xl bg-stone-50 p-3 dark:bg-stone-800">
+                        <p className="text-[11px] font-medium uppercase tracking-wider text-stone-400">Session price</p>
+                        <p className="mt-1 text-lg font-bold text-stone-900 dark:text-white">${selectedCoachPrice.toFixed(2)}</p>
+                        {selectedCoachGymShare > 0 && (
+                          <div className="mt-2 flex items-center gap-3 text-xs text-stone-500 dark:text-stone-400">
+                            <span>Gym share ({selectedCoachGymShare}%): <span className="font-semibold text-brand-600 dark:text-brand-400">${gymShareAmount.toFixed(2)}</span></span>
+                            <span className="text-stone-300 dark:text-stone-600">|</span>
+                            <span>Coach net: <span className="font-semibold text-emerald-600 dark:text-emerald-400">${coachNetAmount.toFixed(2)}</span></span>
+                          </div>
+                        )}
+                        {activeSub && (
+                          <p className="mt-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">Covered by your subscription — no extra charge.</p>
+                        )}
                       </div>
-                      {bookPayMethod === "card" && (
-                        <input type="text" placeholder="Card last 4 digits" value={bookCardLast4} onChange={(e) => setBookCardLast4(e.target.value)}
-                          className="mt-2 h-9 w-full max-w-[200px] rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" />
-                      )}
                     </div>
                   )}
 
-                  <button type="button" disabled={bookingSaving} onClick={handleBook}
-                    className="mt-5 inline-flex items-center rounded-xl bg-brand-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-600 disabled:opacity-50">
+                  {/* Payment method */}
+                  <div className="mt-4 space-y-4">
+                    <div>
+                      <p className="mb-2 text-xs font-medium text-stone-600 dark:text-stone-400">Payment method <span className="text-red-500">*</span></p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => setBookPayMethod("cash")}
+                          className={`flex items-center justify-center gap-2 rounded-xl border-2 px-3 py-2.5 text-xs font-medium transition ${bookPayMethod === "cash" ? "border-brand-500 bg-brand-50 text-brand-600 dark:bg-brand-950/30 dark:text-brand-400" : "border-stone-200 bg-white text-stone-600 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300"}`}>
+                          Cash
+                        </button>
+                        <button type="button" onClick={() => setBookPayMethod("card")}
+                          className={`flex items-center justify-center gap-2 rounded-xl border-2 px-3 py-2.5 text-xs font-medium transition ${bookPayMethod === "card" ? "border-brand-500 bg-brand-50 text-brand-600 dark:bg-brand-950/30 dark:text-brand-400" : "border-stone-200 bg-white text-stone-600 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300"}`}>
+                          Card
+                        </button>
+                      </div>
+                      {bookPayMethod === "" && (
+                        <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
+                          Select a payment method before confirming booking.
+                        </p>
+                      )}
+                    </div>
+
+                    {bookPayMethod === "card" && (
+                      <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50/50 p-4 dark:border-stone-700 dark:bg-stone-800/50">
+                        <div>
+                          <label className="mb-1 block text-[11px] font-medium text-stone-500">Card holder</label>
+                          <input type="text" value={bookCardName} onChange={(e) => setBookCardName(e.target.value)}
+                            className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="Name on card" />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[11px] font-medium text-stone-500">Card number</label>
+                          <input type="text" value={bookCardNumber} onChange={(e) => setBookCardNumber(e.target.value)}
+                            className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="1234 5678 9012 3456" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="mb-1 block text-[11px] font-medium text-stone-500">Expiry</label>
+                            <input type="text" value={bookCardExpiry} onChange={(e) => setBookCardExpiry(e.target.value)}
+                              className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="MM/YY" />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-[11px] font-medium text-stone-500">CVV</label>
+                            <input type="password" value={bookCardCvv} onChange={(e) => setBookCardCvv(e.target.value)}
+                              className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="123" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <button type="button" disabled={bookingSaving || bookingPaymentInvalid} onClick={handleBook}
+                    className="mt-5 flex w-full items-center justify-center rounded-xl bg-brand-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-500/20 transition hover:bg-brand-600 disabled:opacity-50">
                     {bookingSaving ? "Booking..." : "Confirm Booking"}
                   </button>
+                  <p className="mt-2 text-center text-[11px] text-stone-400">Card payments are simulated.</p>
                 </section>
               )}
 

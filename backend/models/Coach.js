@@ -59,6 +59,7 @@ async function list({
       c.specialization,
       c.bio,
       c.price_per_session,
+      c.gym_share_percentage,
       c.is_active,
       c.created_at,
       c.updated_at,
@@ -97,6 +98,7 @@ async function findById(id) {
         c.specialization,
         c.bio,
         c.price_per_session,
+        c.gym_share_percentage,
         c.is_active,
         c.created_at,
         c.updated_at,
@@ -121,21 +123,22 @@ async function create({
   specialization = null,
   bio = null,
   price_per_session = null,
+  gym_share_percentage = 0,
   is_active = true,
 }) {
   const [result] = await pool.query(
     `
-      INSERT INTO coaches (user_id, gym_id, specialization, bio, price_per_session, is_active)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO coaches (user_id, gym_id, specialization, bio, price_per_session, gym_share_percentage, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
-    [user_id, gym_id, specialization, bio, price_per_session, is_active ? 1 : 0],
+    [user_id, gym_id, specialization, bio, price_per_session, gym_share_percentage, is_active ? 1 : 0],
   );
   return result.insertId;
 }
 
 async function update(
   id,
-  { user_id, gym_id, specialization, bio, price_per_session, is_active },
+  { user_id, gym_id, specialization, bio, price_per_session, gym_share_percentage, is_active },
 ) {
   const fields = [];
   const params = [];
@@ -159,6 +162,10 @@ async function update(
   if (price_per_session !== undefined) {
     fields.push('price_per_session = ?');
     params.push(price_per_session);
+  }
+  if (gym_share_percentage !== undefined) {
+    fields.push('gym_share_percentage = ?');
+    params.push(gym_share_percentage);
   }
   if (is_active !== undefined) {
     fields.push('is_active = ?');

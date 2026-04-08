@@ -201,6 +201,7 @@ async function create(req, res, next) {
       specialization,
       bio,
       price_per_session,
+      gym_share_percentage,
       is_active,
       availability,
     } = req.body || {};
@@ -222,6 +223,13 @@ async function create(req, res, next) {
         return next(err);
       }
     }
+    const sharePct =
+      gym_share_percentage !== undefined && gym_share_percentage !== null && gym_share_percentage !== ''
+        ? Number(gym_share_percentage)
+        : 0;
+    if (Number.isNaN(sharePct) || sharePct < 0 || sharePct > 100) {
+      return next(new AppError('gym_share_percentage must be between 0 and 100', 400));
+    }
 
     const id = await Coach.create({
       user_id: Number(user_id),
@@ -232,6 +240,7 @@ async function create(req, res, next) {
         price_per_session !== undefined && price_per_session !== null
           ? Number(price_per_session)
           : null,
+      gym_share_percentage: sharePct,
       is_active: is_active !== undefined ? Boolean(is_active) : true,
     });
 
@@ -275,6 +284,7 @@ async function update(req, res, next) {
       specialization,
       bio,
       price_per_session,
+      gym_share_percentage,
       is_active,
       availability,
     } = req.body || {};
@@ -297,6 +307,13 @@ async function update(req, res, next) {
         price_per_session !== null && price_per_session !== ''
           ? Number(price_per_session)
           : null;
+    }
+    if (gym_share_percentage !== undefined) {
+      const sharePct = Number(gym_share_percentage);
+      if (Number.isNaN(sharePct) || sharePct < 0 || sharePct > 100) {
+        return next(new AppError('gym_share_percentage must be between 0 and 100', 400));
+      }
+      data.gym_share_percentage = sharePct;
     }
     if (is_active !== undefined) data.is_active = Boolean(is_active);
 
@@ -388,6 +405,7 @@ async function exportExcel(req, res, next) {
       { header: 'Specialization', key: 'specialization', width: 24 },
       { header: 'Bio', key: 'bio', width: 40 },
       { header: 'Price / session', key: 'price_per_session', width: 16 },
+      { header: 'Gym share %', key: 'gym_share_percentage', width: 14 },
       { header: 'Availability', key: 'availability', width: 50 },
       { header: 'Active', key: 'is_active', width: 10 },
       { header: 'Created At', key: 'created_at', width: 24 },
@@ -415,6 +433,7 @@ async function exportExcel(req, res, next) {
         specialization: row.specialization || '',
         bio: row.bio || '',
         price_per_session: row.price_per_session,
+        gym_share_percentage: row.gym_share_percentage,
         availability: availStr || 'N/A',
         is_active: row.is_active ? 'Yes' : 'No',
         created_at: row.created_at,

@@ -224,21 +224,27 @@ async function book(req, res, next) {
     );
     if (overlap) return next(new AppError('Coach is not available at that time (overlapping session)', 409));
 
+    if (payment_method !== 'cash' && payment_method !== 'card') {
+      return next(new AppError('payment_method must be cash or card', 400));
+    }
+    if (payment_method === 'card') {
+      const last4 = (card_last4 || '').toString().trim();
+      if (!/^\d{4}$/.test(last4)) {
+        return next(new AppError('card_last4 must be exactly 4 digits for card payments', 400));
+      }
+    }
+
     const activeSub = await UserSubscription.activeForGym(userId, Number(gym_id));
 
-    let sessionPrice = 0;
-    let requiresPayment = false;
+    const coachPrice = coach.price_per_session ? Number(coach.price_per_session) : 0;
+    const gymPrice = gym.session_price ? Number(gym.session_price) : 0;
+    const sessionPrice = coachPrice || gymPrice;
 
-    if (!activeSub) {
-      const coachPrice = coach.price_per_session ? Number(coach.price_per_session) : 0;
-      const gymPrice = gym.session_price ? Number(gym.session_price) : 0;
-      sessionPrice = coachPrice || gymPrice;
-
-      if (sessionPrice <= 0) {
-        return next(new AppError('You need an active subscription or the gym must set a per-session price', 400));
-      }
-      requiresPayment = true;
+    if (!activeSub && sessionPrice <= 0) {
+      return next(new AppError('You need an active subscription or the gym must set a per-session price', 400));
     }
+
+    const requiresPayment = !activeSub && sessionPrice > 0;
 
     const sessionId = await Session.create({
       user_id: userId,
@@ -247,23 +253,24 @@ async function book(req, res, next) {
       session_date,
       start_time,
       end_time,
-      price: requiresPayment ? sessionPrice : 0,
+      price: sessionPrice,
       status: 'booked',
       is_private: isPrivateSession,
     });
 
-    if (requiresPayment) {
-      const method = payment_method === 'card' ? 'card' : 'cash';
-      await Payment.create({
-        user_id: userId,
-        gym_id: Number(gym_id),
-        subscription_id: null,
-        session_id: sessionId,
-        amount: sessionPrice,
-        method: method === 'card' && card_last4 ? `card ****${card_last4}` : method,
-        status: 'paid',
-      });
-    }
+    const resolvedMethod = payment_method === 'card' && card_last4
+      ? `card ****${card_last4}`
+      : payment_method;
+
+    await Payment.create({
+      user_id: userId,
+      gym_id: Number(gym_id),
+      subscription_id: activeSub ? activeSub.id : null,
+      session_id: sessionId,
+      amount: requiresPayment ? sessionPrice : 0,
+      method: resolvedMethod,
+      status: 'paid',
+    });
 
     const session = await Session.findById(sessionId);
 

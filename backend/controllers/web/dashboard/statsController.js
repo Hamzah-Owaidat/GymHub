@@ -39,7 +39,19 @@ async function overview(req, res, next) {
       pool.query(`SELECT COUNT(*) AS total FROM sessions WHERE deleted_at IS NULL ${fkGym('gym_id').sql}`, fkGym('gym_id').params),
       pool.query(`SELECT COUNT(*) AS total FROM payments WHERE deleted_at IS NULL ${fkGym('gym_id').sql}`, fkGym('gym_id').params),
       pool.query(`SELECT COUNT(*) AS total FROM subscription_plans WHERE deleted_at IS NULL ${fkGym('gym_id').sql}`, fkGym('gym_id').params),
-      pool.query(`SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE deleted_at IS NULL AND status = 'paid' ${fkGym('gym_id').sql}`, fkGym('gym_id').params),
+      pool.query(
+        `SELECT COALESCE(SUM(
+          CASE
+            WHEN p.session_id IS NOT NULL THEN s.price * COALESCE(c.gym_share_percentage, 0) / 100
+            ELSE p.amount
+          END
+        ), 0) AS total
+        FROM payments p
+        LEFT JOIN sessions s ON s.id = p.session_id
+        LEFT JOIN coaches c ON c.id = s.coach_id
+        WHERE p.deleted_at IS NULL AND p.status = 'paid' ${fkGym('p.gym_id').sql}`,
+        fkGym('p.gym_id').params,
+      ),
     ]);
 
     const metrics = {
@@ -63,10 +75,19 @@ async function overview(req, res, next) {
     const fk = fkGym('gym_id');
 
     const [revenueByMonth] = await pool.query(`
-      SELECT DATE_FORMAT(created_at, '%Y-%m') AS month, SUM(amount) AS revenue, COUNT(*) AS count
-      FROM payments
-      WHERE deleted_at IS NULL AND status = 'paid'
-        AND created_at >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH) ${fk.sql}
+      SELECT DATE_FORMAT(p.created_at, '%Y-%m') AS month,
+        SUM(
+          CASE
+            WHEN p.session_id IS NOT NULL THEN s.price * COALESCE(c.gym_share_percentage, 0) / 100
+            ELSE p.amount
+          END
+        ) AS revenue,
+        COUNT(*) AS count
+      FROM payments p
+      LEFT JOIN sessions s ON s.id = p.session_id
+      LEFT JOIN coaches c ON c.id = s.coach_id
+      WHERE p.deleted_at IS NULL AND p.status = 'paid'
+        AND p.created_at >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH) ${fk.sql.replace(/gym_id/g, 'p.gym_id')}
       GROUP BY month ORDER BY month ASC
     `, fk.params);
 
@@ -97,8 +118,17 @@ async function overview(req, res, next) {
       FROM gyms g
       LEFT JOIN sessions s ON s.gym_id = g.id AND s.deleted_at IS NULL
       LEFT JOIN (
-        SELECT gym_id, SUM(amount) AS revenue
-        FROM payments WHERE deleted_at IS NULL AND status = 'paid'
+        SELECT p.gym_id,
+          SUM(
+            CASE
+              WHEN p.session_id IS NOT NULL THEN s.price * COALESCE(c.gym_share_percentage, 0) / 100
+              ELSE p.amount
+            END
+          ) AS revenue
+        FROM payments p
+        LEFT JOIN sessions s ON s.id = p.session_id
+        LEFT JOIN coaches c ON c.id = s.coach_id
+        WHERE p.deleted_at IS NULL AND p.status = 'paid'
         GROUP BY gym_id
       ) p2 ON p2.gym_id = g.id
       WHERE g.deleted_at IS NULL ${gs.sql}
