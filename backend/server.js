@@ -1,6 +1,7 @@
 require('dotenv').config();
 const http = require('http');
 const app = require('./app');
+const sessionCron = require('./cron/completeExpiredSessions');
 
 const PORT = process.env.PORT || 8080;
 
@@ -11,6 +12,7 @@ function start() {
     console.log(`GymHub server listening on http://localhost:${PORT}`);
     console.log(`Environment: ${process.env.ENVIRONMENT || 'development'}`);
   });
+  sessionCron.start();
 }
 
 const SHUTDOWN_TIMEOUT_MS = 10000;
