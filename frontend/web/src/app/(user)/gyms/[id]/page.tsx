@@ -11,6 +11,7 @@ import {
   type CoachDateAvailabilityResponse,
 } from "@/lib/api/userSessions";
 import { rateGym, getGymRatings, type GymRating } from "@/lib/api/userRatings";
+import { getUserCards, type SavedCard } from "@/lib/api/userCards";
 import { useToast } from "@/context/ToastContext";
 import { useAuthStore } from "@/store/authStore";
 import StarRating from "@/components/ui/StarRating";
@@ -68,8 +69,10 @@ export default function GymDetailsPage() {
   const [coaches, setCoaches] = useState<any[]>([]);
   const [currentImg, setCurrentImg] = useState(0);
   const [activeSub, setActiveSub] = useState<any | null>(null);
+  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
 
   // Subscribe state
+  const [subSavedCardId, setSubSavedCardId] = useState<number | null>(null);
   const [subscribePlanId, setSubscribePlanId] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [cardNumber, setCardNumber] = useState("");
@@ -86,6 +89,7 @@ export default function GymDetailsPage() {
   const [bookEnd, setBookEnd] = useState("");
   const [bookVisibility, setBookVisibility] = useState<SessionVisibility>("private");
   const [bookPayMethod, setBookPayMethod] = useState<OptionalPaymentMethod>("");
+  const [bookSavedCardId, setBookSavedCardId] = useState<number | null>(null);
   const [bookCardName, setBookCardName] = useState("");
   const [bookCardNumber, setBookCardNumber] = useState("");
   const [bookCardExpiry, setBookCardExpiry] = useState("");
@@ -107,7 +111,7 @@ export default function GymDetailsPage() {
   const [reviews, setReviews] = useState<GymRating[]>([]);
   const bookingPaymentInvalid =
     bookPayMethod === "" ||
-    (bookPayMethod === "card" && bookCardNumber.trim().length < 4);
+    (bookPayMethod === "card" && !bookSavedCardId && bookCardNumber.trim().length < 4);
 
   const availableStartOptions = (() => {
     if (!availabilityInfo) return [];
@@ -221,6 +225,10 @@ export default function GymDetailsPage() {
         }
         const ratingsRes = await getGymRatings(gymId, { page: 1, limit: 10 });
         setReviews(ratingsRes.data || []);
+        try {
+          const cardsRes = await getUserCards();
+          setSavedCards(cardsRes.data || []);
+        } catch { /* user might not be logged in */ }
       } catch (e: unknown) {
         showError(e instanceof Error ? e.message : "Failed to load gym");
       } finally {
@@ -276,19 +284,25 @@ export default function GymDetailsPage() {
 
   const handleSubscribe = async () => {
     if (!subscribePlanId) { showError("Please select a plan first."); return; }
-    if (paymentMethod === "card" && !/^\d{4}$/.test(cardNumber.trim().slice(-4))) {
-      showError("For card payments, enter a valid card number ending with 4 digits.");
+    if (paymentMethod === "card" && !subSavedCardId && !/^\d{4}$/.test(cardNumber.trim().slice(-4))) {
+      showError("For card payments, select a saved card or enter a valid card number.");
       return;
     }
     setSavingSub(true);
     try {
       const body: { plan_id: number; payment_method: PaymentMethod; card_last4?: string } =
         { plan_id: subscribePlanId, payment_method: paymentMethod };
-      if (paymentMethod === "card" && cardNumber.trim().length >= 4)
-        body.card_last4 = cardNumber.trim().slice(-4);
+      if (paymentMethod === "card") {
+        if (subSavedCardId) {
+          const sc = savedCards.find((c) => c.id === subSavedCardId);
+          if (sc) body.card_last4 = sc.card_last4;
+        } else if (cardNumber.trim().length >= 4) {
+          body.card_last4 = cardNumber.trim().slice(-4);
+        }
+      }
       await createUserSubscription(body);
       showSuccess("Subscription created!");
-      setSubscribePlanId(null);
+      setSubscribePlanId(null); setSubSavedCardId(null);
       setCardNumber(""); setCardName(""); setCardExpiry(""); setCardCvv("");
       const res = await getGymDetails(gymId);
       setActiveSub(res.activeSubscription || null);
@@ -316,8 +330,8 @@ export default function GymDetailsPage() {
       showError("Please select payment method (cash or card) before confirming.");
       return;
     }
-    if (bookPayMethod === "card" && bookCardNumber.trim().length < 4) {
-      showError("For card payments, enter a valid card number.");
+    if (bookPayMethod === "card" && !bookSavedCardId && bookCardNumber.trim().length < 4) {
+      showError("For card payments, select a saved card or enter a valid card number.");
       return;
     }
     if (selectedWindowMode === "both" && !bookVisibility) {
@@ -326,6 +340,15 @@ export default function GymDetailsPage() {
     }
     setBookingSaving(true);
     try {
+      let last4: string | undefined;
+      if (bookPayMethod === "card") {
+        if (bookSavedCardId) {
+          const sc = savedCards.find((c) => c.id === bookSavedCardId);
+          if (sc) last4 = sc.card_last4;
+        } else if (bookCardNumber.trim().length >= 4) {
+          last4 = bookCardNumber.trim().slice(-4);
+        }
+      }
       const res = await bookSession({
         gym_id: gymId,
         coach_id: bookCoachId,
@@ -334,7 +357,7 @@ export default function GymDetailsPage() {
         end_time: bookEnd,
         session_visibility: bookVisibility,
         payment_method: bookPayMethod as PaymentMethod,
-        card_last4: bookPayMethod === "card" ? bookCardNumber.trim().slice(-4) : undefined,
+        card_last4: last4,
       });
       if (res.payment_required) {
         showSuccess(`Session booked! $${res.amount_charged.toFixed(2)} charged.`);
@@ -344,7 +367,7 @@ export default function GymDetailsPage() {
       setShowBooking(false);
       setBookCoachId(null); setBookDate(""); setBookStart(""); setBookEnd("");
       setBookVisibility("private");
-      setBookPayMethod("");
+      setBookPayMethod(""); setBookSavedCardId(null);
       setBookCardName(""); setBookCardNumber(""); setBookCardExpiry(""); setBookCardCvv("");
       setAvailabilityInfo(null);
     } catch (e: unknown) {
@@ -501,7 +524,7 @@ export default function GymDetailsPage() {
                         setShowBooking((prev) => {
                           const next = !prev;
                           if (next) {
-                            setBookPayMethod("");
+                            setBookPayMethod(""); setBookSavedCardId(null);
                             setBookCardName(""); setBookCardNumber(""); setBookCardExpiry(""); setBookCardCvv("");
                           }
                           return next;
@@ -826,7 +849,7 @@ export default function GymDetailsPage() {
                     <div>
                       <p className="mb-2 text-xs font-medium text-stone-600 dark:text-stone-400">Payment method <span className="text-red-500">*</span></p>
                       <div className="grid grid-cols-2 gap-2">
-                        <button type="button" onClick={() => setBookPayMethod("cash")}
+                        <button type="button" onClick={() => { setBookPayMethod("cash"); setBookSavedCardId(null); }}
                           className={`flex items-center justify-center gap-2 rounded-xl border-2 px-3 py-2.5 text-xs font-medium transition ${bookPayMethod === "cash" ? "border-brand-500 bg-brand-50 text-brand-600 dark:bg-brand-950/30 dark:text-brand-400" : "border-stone-200 bg-white text-stone-600 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300"}`}>
                           Cash
                         </button>
@@ -843,29 +866,75 @@ export default function GymDetailsPage() {
                     </div>
 
                     {bookPayMethod === "card" && (
-                      <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50/50 p-4 dark:border-stone-700 dark:bg-stone-800/50">
-                        <div>
-                          <label className="mb-1 block text-[11px] font-medium text-stone-500">Card holder</label>
-                          <input type="text" value={bookCardName} onChange={(e) => setBookCardName(e.target.value)}
-                            className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="Name on card" />
-                        </div>
-                        <div>
-                          <label className="mb-1 block text-[11px] font-medium text-stone-500">Card number</label>
-                          <input type="text" value={bookCardNumber} onChange={(e) => setBookCardNumber(e.target.value)}
-                            className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="1234 5678 9012 3456" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-3">
+                        {savedCards.length > 0 && (
                           <div>
-                            <label className="mb-1 block text-[11px] font-medium text-stone-500">Expiry</label>
-                            <input type="text" value={bookCardExpiry} onChange={(e) => setBookCardExpiry(e.target.value)}
-                              className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="MM/YY" />
+                            <p className="mb-2 text-[11px] font-medium text-stone-500">Saved cards</p>
+                            <div className="space-y-2">
+                              {savedCards.map((sc) => (
+                                <button
+                                  key={sc.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setBookSavedCardId(sc.id);
+                                    setBookCardName(""); setBookCardNumber(""); setBookCardExpiry(""); setBookCardCvv("");
+                                  }}
+                                  className={`flex w-full items-center gap-3 rounded-xl border-2 p-3 text-left transition ${bookSavedCardId === sc.id ? "border-brand-500 bg-brand-50 dark:bg-brand-950/30" : "border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-800"}`}
+                                >
+                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-xs font-bold text-stone-600 dark:bg-stone-700 dark:text-stone-300">
+                                    {sc.card_brand.charAt(0).toUpperCase()}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-xs font-semibold text-stone-800 dark:text-stone-200">
+                                      {sc.card_brand.toUpperCase()} •••• {sc.card_last4}
+                                    </p>
+                                    <p className="text-[11px] text-stone-500 dark:text-stone-400">
+                                      {sc.card_holder} &middot; {sc.card_expiry}
+                                      {sc.is_default && <span className="ml-1 text-brand-500">(default)</span>}
+                                    </p>
+                                  </div>
+                                  {bookSavedCardId === sc.id && (
+                                    <svg className="h-5 w-5 shrink-0 text-brand-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => { setBookSavedCardId(null); }}
+                              className={`mt-2 text-[11px] font-medium transition ${!bookSavedCardId ? "text-brand-500" : "text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"}`}
+                            >
+                              {bookSavedCardId ? "Use a new card instead" : "Entering new card details below"}
+                            </button>
                           </div>
-                          <div>
-                            <label className="mb-1 block text-[11px] font-medium text-stone-500">CVV</label>
-                            <input type="password" value={bookCardCvv} onChange={(e) => setBookCardCvv(e.target.value)}
-                              className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="123" />
+                        )}
+
+                        {!bookSavedCardId && (
+                          <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50/50 p-4 dark:border-stone-700 dark:bg-stone-800/50">
+                            <div>
+                              <label className="mb-1 block text-[11px] font-medium text-stone-500">Card holder</label>
+                              <input type="text" value={bookCardName} onChange={(e) => setBookCardName(e.target.value)}
+                                className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="Name on card" />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[11px] font-medium text-stone-500">Card number</label>
+                              <input type="text" value={bookCardNumber} onChange={(e) => setBookCardNumber(e.target.value)}
+                                className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="1234 5678 9012 3456" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="mb-1 block text-[11px] font-medium text-stone-500">Expiry</label>
+                                <input type="text" value={bookCardExpiry} onChange={(e) => setBookCardExpiry(e.target.value)}
+                                  className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="MM/YY" />
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-[11px] font-medium text-stone-500">CVV</label>
+                                <input type="password" value={bookCardCvv} onChange={(e) => setBookCardCvv(e.target.value)}
+                                  className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="123" />
+                              </div>
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -952,7 +1021,7 @@ export default function GymDetailsPage() {
                       <div>
                         <p className="mb-2 text-xs font-medium text-stone-600 dark:text-stone-400">Payment method</p>
                         <div className="grid grid-cols-2 gap-2">
-                          <button type="button" onClick={() => setPaymentMethod("cash")}
+                          <button type="button" onClick={() => { setPaymentMethod("cash"); setSubSavedCardId(null); }}
                             className={`flex items-center justify-center gap-2 rounded-xl border-2 px-3 py-2.5 text-xs font-medium transition ${paymentMethod === "cash" ? "border-brand-500 bg-brand-50 text-brand-600 dark:bg-brand-950/30 dark:text-brand-400" : "border-stone-200 bg-white text-stone-600 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300"}`}>
                             Cash
                           </button>
@@ -964,25 +1033,71 @@ export default function GymDetailsPage() {
                       </div>
 
                       {paymentMethod === "card" && (
-                        <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50/50 p-4 dark:border-stone-700 dark:bg-stone-800/50">
-                          <div>
-                            <label className="mb-1 block text-[11px] font-medium text-stone-500">Card holder</label>
-                            <input type="text" value={cardName} onChange={(e) => setCardName(e.target.value)} className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="Name on card" />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-[11px] font-medium text-stone-500">Card number</label>
-                            <input type="text" value={cardNumber} onChange={(e) => setCardNumber(e.target.value)} className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="1234 5678 9012 3456" />
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-3">
+                          {savedCards.length > 0 && (
                             <div>
-                              <label className="mb-1 block text-[11px] font-medium text-stone-500">Expiry</label>
-                              <input type="text" value={cardExpiry} onChange={(e) => setCardExpiry(e.target.value)} className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="MM/YY" />
+                              <p className="mb-2 text-[11px] font-medium text-stone-500">Saved cards</p>
+                              <div className="space-y-2">
+                                {savedCards.map((sc) => (
+                                  <button
+                                    key={sc.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSubSavedCardId(sc.id);
+                                      setCardName(""); setCardNumber(""); setCardExpiry(""); setCardCvv("");
+                                    }}
+                                    className={`flex w-full items-center gap-3 rounded-xl border-2 p-3 text-left transition ${subSavedCardId === sc.id ? "border-brand-500 bg-brand-50 dark:bg-brand-950/30" : "border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-800"}`}
+                                  >
+                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-xs font-bold text-stone-600 dark:bg-stone-700 dark:text-stone-300">
+                                      {sc.card_brand.charAt(0).toUpperCase()}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-xs font-semibold text-stone-800 dark:text-stone-200">
+                                        {sc.card_brand.toUpperCase()} •••• {sc.card_last4}
+                                      </p>
+                                      <p className="text-[11px] text-stone-500 dark:text-stone-400">
+                                        {sc.card_holder} &middot; {sc.card_expiry}
+                                        {sc.is_default && <span className="ml-1 text-brand-500">(default)</span>}
+                                      </p>
+                                    </div>
+                                    {subSavedCardId === sc.id && (
+                                      <svg className="h-5 w-5 shrink-0 text-brand-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => { setSubSavedCardId(null); }}
+                                className={`mt-2 text-[11px] font-medium transition ${!subSavedCardId ? "text-brand-500" : "text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"}`}
+                              >
+                                {subSavedCardId ? "Use a new card instead" : "Entering new card details below"}
+                              </button>
                             </div>
-                            <div>
-                              <label className="mb-1 block text-[11px] font-medium text-stone-500">CVV</label>
-                              <input type="password" value={cardCvv} onChange={(e) => setCardCvv(e.target.value)} className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="123" />
+                          )}
+
+                          {!subSavedCardId && (
+                            <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50/50 p-4 dark:border-stone-700 dark:bg-stone-800/50">
+                              <div>
+                                <label className="mb-1 block text-[11px] font-medium text-stone-500">Card holder</label>
+                                <input type="text" value={cardName} onChange={(e) => setCardName(e.target.value)} className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="Name on card" />
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-[11px] font-medium text-stone-500">Card number</label>
+                                <input type="text" value={cardNumber} onChange={(e) => setCardNumber(e.target.value)} className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="1234 5678 9012 3456" />
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="mb-1 block text-[11px] font-medium text-stone-500">Expiry</label>
+                                  <input type="text" value={cardExpiry} onChange={(e) => setCardExpiry(e.target.value)} className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="MM/YY" />
+                                </div>
+                                <div>
+                                  <label className="mb-1 block text-[11px] font-medium text-stone-500">CVV</label>
+                                  <input type="password" value={cardCvv} onChange={(e) => setCardCvv(e.target.value)} className="h-9 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100" placeholder="123" />
+                                </div>
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </div>
                       )}
                     </div>

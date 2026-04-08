@@ -5,6 +5,7 @@ const subscriptionController = require('../controllers/web/user/subscriptionCont
 const userSessionController = require('../controllers/web/user/sessionController');
 const contactController = require('../controllers/web/user/contactController');
 const ratingController = require('../controllers/web/user/ratingController');
+const cardController = require('../controllers/web/user/cardController');
 
 const router = express.Router();
 
@@ -25,5 +26,10 @@ router.post('/sessions/book', userSessionController.book);
 
 router.get('/gyms/:gymId/my-rating', ratingController.getMyRating);
 router.post('/gyms/:gymId/rate', ratingController.rate);
+
+router.get('/cards', cardController.list);
+router.post('/cards', cardController.create);
+router.patch('/cards/:id/default', cardController.setDefault);
+router.delete('/cards/:id', cardController.remove);
 
 module.exports = router;
