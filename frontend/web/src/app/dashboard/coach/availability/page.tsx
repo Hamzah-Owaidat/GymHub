@@ -23,6 +23,43 @@ const HOURS = Array.from({ length: 24 }, (_, i) => {
 
 type AvailabilitySlot = { day: string; start_time: string; end_time: string; is_private: boolean };
 
+function validateSlots(slots: AvailabilitySlot[]): string | null {
+  const seen = new Set<string>();
+
+  for (const slot of slots) {
+    if (!slot.day || !slot.start_time || !slot.end_time) {
+      return "Each availability slot must include day, start time, and end time.";
+    }
+
+    if (slot.start_time >= slot.end_time) {
+      return `Start time must be before end time for ${slot.day}.`;
+    }
+
+    const key = `${slot.day}|${slot.start_time}|${slot.end_time}`;
+    if (seen.has(key)) {
+      return `Duplicate slot detected: ${slot.day} ${slot.start_time}-${slot.end_time}.`;
+    }
+    seen.add(key);
+  }
+
+  const grouped = new Map<string, AvailabilitySlot[]>();
+  for (const slot of slots) {
+    if (!grouped.has(slot.day)) grouped.set(slot.day, []);
+    grouped.get(slot.day)!.push(slot);
+  }
+
+  for (const [day, daySlots] of grouped.entries()) {
+    const sorted = [...daySlots].sort((a, b) => a.start_time.localeCompare(b.start_time));
+    for (let i = 1; i < sorted.length; i += 1) {
+      if (sorted[i].start_time < sorted[i - 1].end_time) {
+        return `Availability slots overlap on ${day}.`;
+      }
+    }
+  }
+
+  return null;
+}
+
 export default function CoachAvailabilityPage() {
   const { error: showError, success: showSuccess } = useToast();
   const [loading, setLoading] = useState(true);
@@ -65,6 +102,12 @@ export default function CoachAvailabilityPage() {
   };
 
   const handleSave = async () => {
+    const validationError = validateSlots(slots);
+    if (validationError) {
+      showError(validationError);
+      return;
+    }
+
     setSaving(true);
     try {
       await updateMyAvailability(

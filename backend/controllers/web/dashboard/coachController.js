@@ -25,12 +25,44 @@ function validateAvailabilitySlots(slots = []) {
   if (!Array.isArray(slots) || !slots.length) return;
 
   const byDay = new Map();
+  const seenSlots = new Set();
+
+  const normalizeTime = (value) => {
+    const raw = (value || '').toString().trim();
+    const match = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (!match) return null;
+
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    const seconds = Number(match[3] || '0');
+
+    if (
+      Number.isNaN(hours) ||
+      Number.isNaN(minutes) ||
+      Number.isNaN(seconds) ||
+      hours < 0 ||
+      hours > 23 ||
+      minutes < 0 ||
+      minutes > 59 ||
+      seconds < 0 ||
+      seconds > 59
+    ) {
+      return null;
+    }
+
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  };
+
+  const toMinuteOfDay = (time) => {
+    const [hh, mm] = time.split(':');
+    return Number(hh) * 60 + Number(mm);
+  };
 
   for (const rawSlot of slots) {
     const slot = {
-      day: rawSlot.day,
-      start_time: rawSlot.start_time,
-      end_time: rawSlot.end_time,
+      day: (rawSlot.day || '').toString().trim().toLowerCase(),
+      start_time: normalizeTime(rawSlot.start_time),
+      end_time: normalizeTime(rawSlot.end_time),
     };
 
     if (!isValidDay(slot.day)) {
@@ -39,9 +71,17 @@ function validateAvailabilitySlots(slots = []) {
     if (!slot.start_time || !slot.end_time) {
       throw new AppError('Availability start_time and end_time are required for each slot', 400);
     }
-    if (slot.start_time >= slot.end_time) {
+    const startMinute = toMinuteOfDay(slot.start_time);
+    const endMinute = toMinuteOfDay(slot.end_time);
+    if (startMinute >= endMinute) {
       throw new AppError(`Availability start_time must be before end_time for ${slot.day}`, 400);
     }
+
+    const slotKey = `${slot.day}|${slot.start_time}|${slot.end_time}`;
+    if (seenSlots.has(slotKey)) {
+      throw new AppError(`Duplicate availability slot on ${slot.day} ${slot.start_time}-${slot.end_time}`, 400);
+    }
+    seenSlots.add(slotKey);
 
     const key = slot.day;
     if (!byDay.has(key)) byDay.set(key, []);
@@ -55,7 +95,7 @@ function validateAvailabilitySlots(slots = []) {
     for (let i = 1; i < sorted.length; i += 1) {
       const prev = sorted[i - 1];
       const curr = sorted[i];
-      if (curr.start_time < prev.end_time) {
+      if (toMinuteOfDay(curr.start_time) < toMinuteOfDay(prev.end_time)) {
         throw new AppError(`Availability slots overlap on ${day}`, 400);
       }
     }
