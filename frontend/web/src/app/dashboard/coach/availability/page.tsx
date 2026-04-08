@@ -21,7 +21,12 @@ const HOURS = Array.from({ length: 24 }, (_, i) => {
   return `${h}:00`;
 });
 
-type AvailabilitySlot = { day: string; start_time: string; end_time: string; is_private: boolean };
+type AvailabilitySlot = {
+  day: string;
+  start_time: string;
+  end_time: string;
+  slot_mode: "private_only" | "public_only" | "both";
+};
 
 function validateSlots(slots: AvailabilitySlot[]): string | null {
   const seen = new Set<string>();
@@ -76,7 +81,7 @@ export default function CoachAvailabilityPage() {
             day: a.day,
             start_time: a.start_time ? a.start_time.slice(0, 5) : "08:00",
             end_time: a.end_time ? a.end_time.slice(0, 5) : "17:00",
-            is_private: a.is_private !== undefined ? !!a.is_private : true,
+            slot_mode: a.slot_mode || (a.is_private ? "private_only" : "public_only"),
           })),
         );
       } catch (e: unknown) {
@@ -88,7 +93,7 @@ export default function CoachAvailabilityPage() {
   }, [showError]);
 
   const addSlot = () => {
-    setSlots((prev) => [...prev, { day: "monday", start_time: "08:00", end_time: "17:00", is_private: true }]);
+    setSlots((prev) => [...prev, { day: "monday", start_time: "08:00", end_time: "17:00", slot_mode: "private_only" }]);
   };
 
   const removeSlot = (idx: number) => {
@@ -115,7 +120,7 @@ export default function CoachAvailabilityPage() {
           day: s.day,
           start_time: s.start_time || null,
           end_time: s.end_time || null,
-          is_private: s.is_private,
+          slot_mode: s.slot_mode,
         })),
       );
       showSuccess("Availability updated");
@@ -140,7 +145,7 @@ export default function CoachAvailabilityPage() {
               <div>
                 <h3 className="text-sm font-semibold text-stone-900 dark:text-stone-50">Weekly availability</h3>
                 <p className="text-xs text-stone-500 dark:text-stone-400">
-                  Define when you are available for sessions. Private slots cannot overlap with other private sessions.
+                  Define your weekly slots and whether each slot allows private, public, or both session types.
                 </p>
               </div>
               <button
@@ -193,15 +198,15 @@ export default function CoachAvailabilityPage() {
                       </option>
                     ))}
                   </select>
-                  <label className="flex items-center gap-1 text-[11px] text-stone-600 dark:text-stone-300">
-                    <input
-                      type="checkbox"
-                      className="h-3.5 w-3.5 rounded border-stone-300 text-brand-500 focus:ring-brand-500/40"
-                      checked={slot.is_private}
-                      onChange={(e) => updateSlot(idx, "is_private", e.target.checked)}
-                    />
-                    Private slot
-                  </label>
+                  <select
+                    value={slot.slot_mode}
+                    onChange={(e) => updateSlot(idx, "slot_mode", e.target.value)}
+                    className="h-9 min-w-[120px] rounded-lg border border-stone-200 bg-white px-2 text-xs text-stone-700 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                  >
+                    <option value="private_only">Private only</option>
+                    <option value="public_only">Public only</option>
+                    <option value="both">Both</option>
+                  </select>
                   <button
                     type="button"
                     onClick={() => removeSlot(idx)}

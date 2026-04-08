@@ -31,6 +31,7 @@ export type BookSessionBody = {
   session_date: string;
   start_time: string;
   end_time: string;
+  session_visibility?: "private" | "public";
   payment_method?: "cash" | "card";
   card_last4?: string;
 };
@@ -48,10 +49,10 @@ export type CoachDateAvailabilityResponse = {
   gym_id: number;
   date: string;
   day: string;
-  slot_windows: { start_time: string; end_time: string; is_private: boolean }[];
+  slot_windows: { start_time: string; end_time: string; slot_mode: "private_only" | "public_only" | "both" }[];
   busy_windows: { start_time: string; end_time: string }[];
-  available_windows: { start_time: string; end_time: string }[];
-  suggested_slots: { start_time: string; end_time: string; duration_minutes: number }[];
+  available_windows: { start_time: string; end_time: string; slot_mode: "private_only" | "public_only" | "both" }[];
+  suggested_slots: { start_time: string; end_time: string; duration_minutes: number; slot_mode: "private_only" | "public_only" | "both" }[];
 };
 
 export async function getCoachDateAvailability(

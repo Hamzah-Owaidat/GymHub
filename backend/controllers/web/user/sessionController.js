@@ -47,6 +47,30 @@ function subtractBusyFromWindows(windows, busyIntervals) {
   return free.filter((w) => w.end > w.start);
 }
 
+function isValidVisibility(value) {
+  return value === 'private' || value === 'public';
+}
+
+function resolveVisibilityFromSlotMode(slotMode, requestedVisibility) {
+  if (slotMode === 'private_only') return { visibility: 'private', forced: true };
+  if (slotMode === 'public_only') return { visibility: 'public', forced: true };
+  if (slotMode === 'both') {
+    if (!isValidVisibility(requestedVisibility)) {
+      throw new AppError('session_visibility is required (private/public) for this slot', 400);
+    }
+    return { visibility: requestedVisibility, forced: false };
+  }
+  throw new AppError(`Invalid slot_mode: ${slotMode}`, 400);
+}
+
+function findCoveringWindow(windows, startMinute, endMinute) {
+  return windows.find((window) => {
+    const windowStart = toMinutes(window.start_time);
+    const windowEnd = toMinutes(window.end_time);
+    return windowStart !== null && windowEnd !== null && startMinute >= windowStart && endMinute <= windowEnd;
+  }) || null;
+}
+
 async function buildCoachAvailabilityForDate(coachId, sessionDate) {
   const date = new Date(`${sessionDate}T00:00:00`);
   if (Number.isNaN(date.getTime())) {
@@ -60,7 +84,7 @@ async function buildCoachAvailabilityForDate(coachId, sessionDate) {
     .map((slot) => ({
       start: toMinutes(slot.start_time),
       end: toMinutes(slot.end_time),
-      is_private: !!slot.is_private,
+      slot_mode: slot.slot_mode || (slot.is_private ? 'private_only' : 'public_only'),
     }))
     .filter((slot) => slot.start !== null && slot.end !== null && slot.end > slot.start);
 
@@ -74,18 +98,19 @@ async function buildCoachAvailabilityForDate(coachId, sessionDate) {
     .filter((row) => row.start !== null && row.end !== null && row.end > row.start)
     .map((row) => ({ start: row.start, end: row.end, status: row.status }));
 
-  const freeIntervals = subtractBusyFromWindows(
-    daySlots.map((slot) => ({ start: slot.start, end: slot.end })),
-    busyIntervals,
+  const freeIntervalsByMode = daySlots.flatMap((slot) =>
+    subtractBusyFromWindows([{ start: slot.start, end: slot.end }], busyIntervals)
+      .map((window) => ({ ...window, slot_mode: slot.slot_mode })),
   );
 
   const suggestedSlots = [];
-  for (const interval of freeIntervals) {
+  for (const interval of freeIntervalsByMode) {
     for (let start = interval.start; start + 60 <= interval.end; start += 30) {
       suggestedSlots.push({
         start_time: minuteToTime(start),
         end_time: minuteToTime(start + 60),
         duration_minutes: 60,
+        slot_mode: interval.slot_mode,
       });
     }
   }
@@ -95,15 +120,16 @@ async function buildCoachAvailabilityForDate(coachId, sessionDate) {
     slot_windows: daySlots.map((slot) => ({
       start_time: minuteToTime(slot.start),
       end_time: minuteToTime(slot.end),
-      is_private: slot.is_private,
+      slot_mode: slot.slot_mode,
     })),
     busy_windows: busyIntervals.map((slot) => ({
       start_time: minuteToTime(slot.start),
       end_time: minuteToTime(slot.end),
     })),
-    available_windows: freeIntervals.map((slot) => ({
+    available_windows: freeIntervalsByMode.map((slot) => ({
       start_time: minuteToTime(slot.start),
       end_time: minuteToTime(slot.end),
+      slot_mode: slot.slot_mode,
     })),
     suggested_slots: suggestedSlots,
   };
@@ -162,7 +188,7 @@ async function book(req, res, next) {
     const userId = req.user && req.user.id;
     if (!userId) return next(new AppError('Authentication required', 401));
 
-    const { gym_id, coach_id, session_date, start_time, end_time, payment_method, card_last4 } = req.body || {};
+    const { gym_id, coach_id, session_date, start_time, end_time, session_visibility, payment_method, card_last4 } = req.body || {};
 
     if (!gym_id) return next(new AppError('gym_id is required', 400));
     if (!coach_id) return next(new AppError('coach_id is required', 400));
@@ -186,14 +212,12 @@ async function book(req, res, next) {
     const availability = await buildCoachAvailabilityForDate(Number(coach_id), session_date);
     const requestedStart = toMinutes(normalizedStart);
     const requestedEnd = toMinutes(normalizedEnd);
-    const insideAvailability = availability.available_windows.some((window) => {
-      const windowStart = toMinutes(window.start_time);
-      const windowEnd = toMinutes(window.end_time);
-      return windowStart !== null && windowEnd !== null && requestedStart >= windowStart && requestedEnd <= windowEnd;
-    });
-    if (!insideAvailability) {
+    const coveringWindow = findCoveringWindow(availability.available_windows, requestedStart, requestedEnd);
+    if (!coveringWindow) {
       return next(new AppError('Selected time is outside coach availability for this date', 409));
     }
+    const resolved = resolveVisibilityFromSlotMode(coveringWindow.slot_mode, session_visibility);
+    const isPrivateSession = resolved.visibility === 'private';
 
     const overlap = await Session.hasOverlappingCoachSession(
       Number(coach_id), session_date, start_time, end_time,
@@ -225,7 +249,7 @@ async function book(req, res, next) {
       end_time,
       price: requiresPayment ? sessionPrice : 0,
       status: 'booked',
-      is_private: true,
+      is_private: isPrivateSession,
     });
 
     if (requiresPayment) {
@@ -246,6 +270,7 @@ async function book(req, res, next) {
     res.status(201).json({
       success: true,
       session,
+      session_visibility: resolved.visibility,
       payment_required: requiresPayment,
       amount_charged: requiresPayment ? sessionPrice : 0,
     });

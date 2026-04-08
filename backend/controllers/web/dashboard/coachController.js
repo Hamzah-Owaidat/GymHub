@@ -26,6 +26,7 @@ function validateAvailabilitySlots(slots = []) {
 
   const byDay = new Map();
   const seenSlots = new Set();
+  const allowedSlotModes = new Set(['private_only', 'public_only', 'both']);
 
   const normalizeTime = (value) => {
     const raw = (value || '').toString().trim();
@@ -63,6 +64,7 @@ function validateAvailabilitySlots(slots = []) {
       day: (rawSlot.day || '').toString().trim().toLowerCase(),
       start_time: normalizeTime(rawSlot.start_time),
       end_time: normalizeTime(rawSlot.end_time),
+      slot_mode: (rawSlot.slot_mode || '').toString().trim().toLowerCase(),
     };
 
     if (!isValidDay(slot.day)) {
@@ -70,6 +72,16 @@ function validateAvailabilitySlots(slots = []) {
     }
     if (!slot.start_time || !slot.end_time) {
       throw new AppError('Availability start_time and end_time are required for each slot', 400);
+    }
+    if (!slot.slot_mode) {
+      if (rawSlot.is_private === true || rawSlot.is_private === 'true' || rawSlot.is_private === 1 || rawSlot.is_private === '1') {
+        slot.slot_mode = 'private_only';
+      } else {
+        slot.slot_mode = 'public_only';
+      }
+    }
+    if (!allowedSlotModes.has(slot.slot_mode)) {
+      throw new AppError(`Invalid availability slot_mode: ${slot.slot_mode}`, 400);
     }
     const startMinute = toMinuteOfDay(slot.start_time);
     const endMinute = toMinuteOfDay(slot.end_time);

@@ -9,6 +9,7 @@ export type CoachAvailability = {
   day: string;
   start_time: string | null;
   end_time: string | null;
+  slot_mode?: "private_only" | "public_only" | "both";
   is_private?: boolean;
 };
 
@@ -64,7 +65,7 @@ export async function createCoach(body: {
   bio?: string;
   price_per_session?: number;
   is_active?: boolean;
-  availability?: { day: string; start_time: string | null; end_time: string | null; is_private?: boolean }[];
+  availability?: { day: string; start_time: string | null; end_time: string | null; slot_mode?: "private_only" | "public_only" | "both"; is_private?: boolean }[];
 }) {
   const res = await apiClient.post<{ success: boolean; coach: Coach }>(`${BASE}/coaches`, body);
   return res.data;
@@ -79,7 +80,7 @@ export async function updateCoach(
     bio: string;
     price_per_session: number;
     is_active: boolean;
-    availability: { day: string; start_time: string | null; end_time: string | null; is_private?: boolean }[];
+    availability: { day: string; start_time: string | null; end_time: string | null; slot_mode?: "private_only" | "public_only" | "both"; is_private?: boolean }[];
   }>,
 ) {
   const res = await apiClient.put<{ success: boolean; coach: Coach }>(`${BASE}/coaches/${id}`, body);
@@ -124,7 +125,7 @@ export async function getMyCoachProfile() {
   return res.data;
 }
 
-export async function updateMyAvailability(slots: { day: string; start_time: string | null; end_time: string | null; is_private?: boolean }[]) {
+export async function updateMyAvailability(slots: { day: string; start_time: string | null; end_time: string | null; slot_mode?: "private_only" | "public_only" | "both"; is_private?: boolean }[]) {
   const res = await apiClient.put<{ success: boolean; availability: CoachAvailability[] }>(
     `${BASE}/coach/availability`,
     { availability: slots },

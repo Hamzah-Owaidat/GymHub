@@ -194,7 +194,7 @@ async function softDelete(id) {
 
 async function getAvailability(coachId) {
   const [rows] = await pool.query(
-    `SELECT id, coach_id, day, start_time, end_time, is_private
+    `SELECT id, coach_id, day, start_time, end_time, is_private, slot_mode
      FROM coach_availability
      WHERE coach_id = ? AND deleted_at IS NULL
      ORDER BY FIELD(day, 'monday','tuesday','wednesday','thursday','friday','saturday','sunday'), start_time`,
@@ -222,14 +222,22 @@ async function replaceAvailability(coachId, slots) {
 
   if (!normalizedSlots.length) return;
 
-  const values = normalizedSlots.map(() => '(?, ?, ?, ?, ?)').join(', ');
+  const values = normalizedSlots.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
   const params = [];
   normalizedSlots.forEach((s) => {
-    params.push(coachId, s.day, s.start_time || null, s.end_time || null, s.is_private ? 1 : 0);
+    const slotMode = s.slot_mode || (s.is_private ? 'private_only' : 'public_only');
+    params.push(
+      coachId,
+      s.day,
+      s.start_time || null,
+      s.end_time || null,
+      s.is_private ? 1 : 0,
+      slotMode,
+    );
   });
 
   await pool.query(
-    `INSERT INTO coach_availability (coach_id, day, start_time, end_time, is_private) VALUES ${values}`,
+    `INSERT INTO coach_availability (coach_id, day, start_time, end_time, is_private, slot_mode) VALUES ${values}`,
     params,
   );
 }

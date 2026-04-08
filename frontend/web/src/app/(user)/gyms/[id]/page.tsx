@@ -29,6 +29,7 @@ function resolveImg(url: string): string {
 }
 
 type PaymentMethod = "cash" | "card";
+type SessionVisibility = "private" | "public";
 
 function toMinutes(time: string): number | null {
   const [h, m] = time.split(":").map(Number);
@@ -82,6 +83,7 @@ export default function GymDetailsPage() {
   const [bookDate, setBookDate] = useState("");
   const [bookStart, setBookStart] = useState("");
   const [bookEnd, setBookEnd] = useState("");
+  const [bookVisibility, setBookVisibility] = useState<SessionVisibility>("private");
   const [bookPayMethod, setBookPayMethod] = useState<PaymentMethod>("cash");
   const [bookCardLast4, setBookCardLast4] = useState("");
   const [bookingSaving, setBookingSaving] = useState(false);
@@ -102,33 +104,58 @@ export default function GymDetailsPage() {
 
   const availableStartOptions = (() => {
     if (!availabilityInfo) return [];
-    const options: string[] = [];
+    const options: Array<{ time: string; slot_mode: "private_only" | "public_only" | "both" }> = [];
     for (const window of availabilityInfo.available_windows || []) {
       const start = toMinutes(window.start_time);
       const end = toMinutes(window.end_time);
       if (start === null || end === null) continue;
       for (let current = start; current + 30 <= end; current += 30) {
-        options.push(minuteToTime(current));
+        options.push({ time: minuteToTime(current), slot_mode: window.slot_mode });
       }
     }
-    return Array.from(new Set(options));
+    const map = new Map<string, "private_only" | "public_only" | "both">();
+    options.forEach((opt) => {
+      if (!map.has(opt.time)) {
+        map.set(opt.time, opt.slot_mode);
+      }
+    });
+    return Array.from(map.entries()).map(([time, slot_mode]) => ({ time, slot_mode }));
   })();
 
   const availableEndOptions = (() => {
     if (!availabilityInfo || !bookStart) return [];
     const startMinute = toMinutes(bookStart);
     if (startMinute === null) return [];
-    const options: string[] = [];
+    const options: Array<{ time: string; slot_mode: "private_only" | "public_only" | "both" }> = [];
     for (const window of availabilityInfo.available_windows || []) {
       const windowStart = toMinutes(window.start_time);
       const windowEnd = toMinutes(window.end_time);
       if (windowStart === null || windowEnd === null) continue;
       if (startMinute < windowStart || startMinute >= windowEnd) continue;
       for (let current = startMinute + 30; current <= windowEnd; current += 30) {
-        options.push(minuteToTime(current));
+        options.push({ time: minuteToTime(current), slot_mode: window.slot_mode });
       }
     }
-    return Array.from(new Set(options));
+    const map = new Map<string, "private_only" | "public_only" | "both">();
+    options.forEach((opt) => {
+      if (!map.has(opt.time)) {
+        map.set(opt.time, opt.slot_mode);
+      }
+    });
+    return Array.from(map.entries()).map(([time, slot_mode]) => ({ time, slot_mode }));
+  })();
+
+  const selectedWindowMode = (() => {
+    if (!availabilityInfo || !bookStart || !bookEnd) return null;
+    const startMinute = toMinutes(bookStart);
+    const endMinute = toMinutes(bookEnd);
+    if (startMinute === null || endMinute === null) return null;
+    const match = (availabilityInfo.available_windows || []).find((window) => {
+      const wStart = toMinutes(window.start_time);
+      const wEnd = toMinutes(window.end_time);
+      return wStart !== null && wEnd !== null && startMinute >= wStart && endMinute <= wEnd;
+    });
+    return match ? match.slot_mode : null;
   })();
 
   const selectedCoach = coaches.find((c) => c.id === bookCoachId) || null;
@@ -212,17 +239,25 @@ export default function GymDetailsPage() {
   }, [showBooking, bookCoachId, bookDate, gymId, showError]);
 
   useEffect(() => {
-    if (bookStart && !availableStartOptions.includes(bookStart)) {
+    if (bookStart && !availableStartOptions.some((opt) => opt.time === bookStart)) {
       setBookStart("");
       setBookEnd("");
     }
   }, [bookStart, availableStartOptions]);
 
   useEffect(() => {
-    if (bookEnd && !availableEndOptions.includes(bookEnd)) {
+    if (bookEnd && !availableEndOptions.some((opt) => opt.time === bookEnd)) {
       setBookEnd("");
     }
   }, [bookEnd, availableEndOptions]);
+
+  useEffect(() => {
+    if (selectedWindowMode === "private_only") {
+      setBookVisibility("private");
+    } else if (selectedWindowMode === "public_only") {
+      setBookVisibility("public");
+    }
+  }, [selectedWindowMode]);
 
   const handleSubscribe = async () => {
     if (!subscribePlanId) { showError("Please select a plan first."); return; }
@@ -251,8 +286,15 @@ export default function GymDetailsPage() {
       showError("Please select coach and date, then choose from available time slots.");
       return;
     }
-    if (!availableStartOptions.includes(bookStart) || !availableEndOptions.includes(bookEnd)) {
+    if (
+      !availableStartOptions.some((opt) => opt.time === bookStart) ||
+      !availableEndOptions.some((opt) => opt.time === bookEnd)
+    ) {
       showError("Please select a valid available time range.");
+      return;
+    }
+    if (selectedWindowMode === "both" && !bookVisibility) {
+      showError("Please choose session visibility (private/public).");
       return;
     }
     setBookingSaving(true);
@@ -263,6 +305,7 @@ export default function GymDetailsPage() {
         session_date: bookDate,
         start_time: bookStart,
         end_time: bookEnd,
+        session_visibility: bookVisibility,
         payment_method: !activeSub ? bookPayMethod : undefined,
         card_last4: !activeSub && bookPayMethod === "card" ? bookCardLast4 : undefined,
       });
@@ -273,6 +316,7 @@ export default function GymDetailsPage() {
       }
       setShowBooking(false);
       setBookCoachId(null); setBookDate(""); setBookStart(""); setBookEnd("");
+      setBookVisibility("private");
       setAvailabilityInfo(null);
     } catch (e: unknown) {
       showError(e instanceof Error ? e.message : "Failed to book session");
@@ -518,9 +562,9 @@ export default function GymDetailsPage() {
                             ? "Select start time"
                             : "No available times"}
                         </option>
-                        {availableStartOptions.map((t) => (
-                          <option key={t} value={t}>
-                            {t}
+                        {availableStartOptions.map((opt) => (
+                          <option key={`${opt.time}-${opt.slot_mode}`} value={opt.time}>
+                            {opt.time}
                           </option>
                         ))}
                       </select>
@@ -540,14 +584,56 @@ export default function GymDetailsPage() {
                             ? "Select end time"
                             : "No valid end times"}
                         </option>
-                        {availableEndOptions.map((t) => (
-                          <option key={t} value={t}>
-                            {t}
+                        {availableEndOptions.map((opt) => (
+                          <option key={`${opt.time}-${opt.slot_mode}`} value={opt.time}>
+                            {opt.time}
                           </option>
                         ))}
                       </select>
                     </div>
                   </div>
+
+                  {selectedWindowMode && (
+                    <div className="mt-4 rounded-xl border border-stone-200 bg-white/70 p-3 dark:border-stone-700 dark:bg-stone-900/70">
+                      <p className="text-xs font-semibold text-stone-700 dark:text-stone-200">
+                        Session visibility
+                      </p>
+                      {selectedWindowMode === "both" ? (
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setBookVisibility("private")}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                              bookVisibility === "private"
+                                ? "bg-brand-500 text-white"
+                                : "bg-stone-200 text-stone-700 dark:bg-stone-700 dark:text-stone-200"
+                            }`}
+                          >
+                            Private
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBookVisibility("public")}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                              bookVisibility === "public"
+                                ? "bg-emerald-500 text-white"
+                                : "bg-stone-200 text-stone-700 dark:bg-stone-700 dark:text-stone-200"
+                            }`}
+                          >
+                            Public
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">
+                          This selected time is{" "}
+                          <span className="font-semibold text-stone-700 dark:text-stone-200">
+                            {selectedWindowMode === "private_only" ? "Private only" : "Public only"}
+                          </span>
+                          .
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="mt-4 rounded-xl border border-stone-200 bg-white/70 p-3 dark:border-stone-700 dark:bg-stone-900/70">
                     <div className="mb-3 flex items-center justify-between">
@@ -648,10 +734,17 @@ export default function GymDetailsPage() {
                         {availabilityInfo.available_windows.length > 0 ? (
                           availabilityInfo.available_windows.map((w, idx) => (
                             <span
-                              key={`${w.start_time}-${w.end_time}-${idx}`}
+                              key={`${w.start_time}-${w.end_time}-${w.slot_mode}-${idx}`}
                               className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
                             >
-                              {w.start_time} - {w.end_time}
+                              {w.start_time} - {w.end_time}{" "}
+                              <span className="opacity-80">
+                                ({w.slot_mode === "both"
+                                  ? "both"
+                                  : w.slot_mode === "private_only"
+                                  ? "private"
+                                  : "public"})
+                              </span>
                             </span>
                           ))
                         ) : (
