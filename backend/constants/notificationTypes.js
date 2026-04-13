@@ -1,7 +1,7 @@
 /**
  * Notification types. Update this file to change without DB migration.
  */
-const NOTIFICATION_TYPES = ['session', 'subscription', 'system'];
+const NOTIFICATION_TYPES = ['session', 'subscription', 'system', 'chat'];
 
 const NOTIFICATION_TYPES_SET = new Set(NOTIFICATION_TYPES);
 

@@ -45,6 +45,7 @@ const AppSidebar: React.FC = () => {
       return [
         { icon: <GridIcon />, name: "Dashboard", path: `${D}/coach` },
         { icon: <CalenderIcon />, name: "My Sessions", path: `${D}/coach/sessions` },
+        { icon: <PlugInIcon />, name: "Chat", path: `${D}/coach/chat` },
         { icon: <PageIcon />, name: "My Availability", path: `${D}/coach/availability` },
       ];
     }

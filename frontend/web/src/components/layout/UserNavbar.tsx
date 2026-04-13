@@ -12,6 +12,7 @@ const NAV_MEMBER = [
   { href: "/", label: "Home" },
   { href: "/gyms", label: "Gyms" },
   { href: "/sessions", label: "Sessions" },
+  { href: "/chat", label: "Chat" },
   { href: "/profile", label: "Profile" },
 ];
 
@@ -34,7 +35,12 @@ export default function UserNavbar() {
   const effectiveUserRole = hydrated ? user?.role : undefined;
   const isStaff =
     effectiveUserRole && STAFF_ROLES.includes(effectiveUserRole);
-  const navLinks = isStaff ? NAV_STAFF : NAV_MEMBER;
+  const navLinks =
+    isStaff && effectiveUserRole === "coach"
+      ? [...NAV_STAFF, { href: "/dashboard/coach/chat", label: "Chat" }]
+      : isStaff
+      ? NAV_STAFF
+      : NAV_MEMBER;
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
