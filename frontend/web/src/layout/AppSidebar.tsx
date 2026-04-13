@@ -1,7 +1,6 @@
 "use client";
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
 import { useAuthStore } from "../store/authStore";
@@ -293,29 +292,13 @@ const AppSidebar: React.FC = () => {
       >
         <Link href="/dashboard">
           {isExpanded || isHovered || isMobileOpen ? (
-            <>
-              <Image
-                className="dark:hidden"
-                src="/images/logo/logo.svg"
-                alt="Logo"
-                width={150}
-                height={40}
-              />
-              <Image
-                className="hidden dark:block"
-                src="/images/logo/logo-dark.svg"
-                alt="Logo"
-                width={150}
-                height={40}
-              />
-            </>
+            <span className="bg-gradient-to-r from-orange-300 via-orange-500 to-orange-600 bg-clip-text text-2xl font-extrabold tracking-wider text-transparent [text-shadow:0_0_12px_rgba(249,115,22,0.5),0_0_26px_rgba(251,146,60,0.35)]">
+              GYMHUB
+            </span>
           ) : (
-            <Image
-              src="/images/logo/logo-icon.svg"
-              alt="Logo"
-              width={32}
-              height={32}
-            />
+            <span className="bg-gradient-to-r from-orange-300 via-orange-500 to-orange-600 bg-clip-text text-lg font-black tracking-wide text-transparent [text-shadow:0_0_10px_rgba(249,115,22,0.45)]">
+              GH
+            </span>
           )}
         </Link>
       </div>

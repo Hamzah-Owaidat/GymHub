@@ -3,7 +3,6 @@ import { ThemeToggleButton } from "@/components/common/ThemeToggleButton";
 import NotificationDropdown from "@/components/header/NotificationDropdown";
 import UserDropdown from "@/components/header/UserDropdown";
 import { useSidebar } from "@/context/SidebarContext";
-import Image from "next/image";
 import Link from "next/link";
 import React, { useState } from "react";
 
@@ -68,20 +67,9 @@ const AppHeader: React.FC = () => {
           </button>
 
           <Link href="/dashboard" className="lg:hidden">
-            <Image
-              width={154}
-              height={32}
-              className="dark:hidden"
-              src="./images/logo/logo.svg"
-              alt="Logo"
-            />
-            <Image
-              width={154}
-              height={32}
-              className="hidden dark:block"
-              src="./images/logo/logo-dark.svg"
-              alt="Logo"
-            />
+            <span className="bg-gradient-to-r from-orange-300 via-orange-500 to-orange-600 bg-clip-text text-xl font-extrabold tracking-wider text-transparent [text-shadow:0_0_10px_rgba(249,115,22,0.45),0_0_24px_rgba(251,146,60,0.3)]">
+              GYMHUB
+            </span>
           </Link>
 
           <button
