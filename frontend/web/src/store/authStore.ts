@@ -14,7 +14,7 @@ type AuthState = {
   user: AuthUser | null;
   token: string | null;
   isAuthenticated: boolean;
-  setAuth: (payload: { user: AuthUser; token: string }) => void;
+  setAuth: (payload: { user: AuthUser; token: string; rememberMe?: boolean }) => void;
   clearAuth: () => void;
 };
 
@@ -23,8 +23,12 @@ function getInitialAuthState(): Pick<AuthState, "user" | "token" | "isAuthentica
     return { user: null, token: null, isAuthenticated: false };
   }
 
-  const token = window.localStorage.getItem("gymhub_token");
-  const rawUser = window.localStorage.getItem("gymhub_user");
+  const token =
+    window.localStorage.getItem("gymhub_token") ||
+    window.sessionStorage.getItem("gymhub_token");
+  const rawUser =
+    window.localStorage.getItem("gymhub_user") ||
+    window.sessionStorage.getItem("gymhub_user");
 
   let user: AuthUser | null = null;
   if (rawUser) {
@@ -47,10 +51,14 @@ export const useAuthStore = create<AuthState>()((set) => {
 
   return {
     ...initial,
-    setAuth: ({ user, token }) => {
+    setAuth: ({ user, token, rememberMe = false }) => {
       if (typeof window !== "undefined") {
-        window.localStorage.setItem("gymhub_token", token);
-        window.localStorage.setItem("gymhub_user", JSON.stringify(user));
+        const storage = rememberMe ? window.localStorage : window.sessionStorage;
+        const otherStorage = rememberMe ? window.sessionStorage : window.localStorage;
+        storage.setItem("gymhub_token", token);
+        storage.setItem("gymhub_user", JSON.stringify(user));
+        otherStorage.removeItem("gymhub_token");
+        otherStorage.removeItem("gymhub_user");
       }
       set({
         user,
@@ -62,6 +70,8 @@ export const useAuthStore = create<AuthState>()((set) => {
       if (typeof window !== "undefined") {
         window.localStorage.removeItem("gymhub_token");
         window.localStorage.removeItem("gymhub_user");
+        window.sessionStorage.removeItem("gymhub_token");
+        window.sessionStorage.removeItem("gymhub_user");
       }
       set({
         user: null,

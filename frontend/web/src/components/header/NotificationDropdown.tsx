@@ -33,7 +33,9 @@ function formatTimeAgo(iso: string) {
 function getStoredUserId(): number | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem("gymhub_user");
+    const raw =
+      window.localStorage.getItem("gymhub_user") ||
+      window.sessionStorage.getItem("gymhub_user");
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return parsed?.id ?? null;
@@ -44,7 +46,10 @@ function getStoredUserId(): number | null {
 
 function isAuthenticated(): boolean {
   if (typeof window === "undefined") return false;
-  return !!window.localStorage.getItem("gymhub_token");
+  return !!(
+    window.localStorage.getItem("gymhub_token") ||
+    window.sessionStorage.getItem("gymhub_token")
+  );
 }
 
 export default function NotificationDropdown() {

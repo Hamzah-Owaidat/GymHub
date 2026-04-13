@@ -13,7 +13,9 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem("gymhub_token");
+    const token =
+      window.localStorage.getItem("gymhub_token") ||
+      window.sessionStorage.getItem("gymhub_token");
     if (token) config.headers.Authorization = `Bearer ${token}`;
   }
   return config;

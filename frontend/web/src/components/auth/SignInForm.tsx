@@ -25,10 +25,12 @@ export default function SignInForm() {
   const { error: showErrorToast, success: showSuccessToast } = useToast();
 
   useEffect(() => {
-    // If there is already a token in localStorage or the store is authenticated,
+    // If there is already a token in local/session storage or the store is authenticated,
     // redirect away from the sign-in page to prevent duplicate login.
     if (typeof window !== "undefined") {
-      const token = window.localStorage.getItem("gymhub_token");
+      const token =
+        window.localStorage.getItem("gymhub_token") ||
+        window.sessionStorage.getItem("gymhub_token");
       if (token || isAuthenticated) {
         router.replace("/");
       }
@@ -55,7 +57,7 @@ export default function SignInForm() {
     setLoading(true);
     try {
       const data = await login(email, password);
-      setAuth({ user: data.user, token: data.token });
+      setAuth({ user: data.user, token: data.token, rememberMe: isChecked });
       showSuccessToast("Login successful. Welcome back!");
       router.push("/");
     } catch (err: any) {
