@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useToast } from "@/context/ToastContext";
 import { getMyCoachProfile } from "@/lib/api/coaches";
 import { getMySessions, type Session } from "@/lib/api/sessions";
+import { getCoachStats } from "@/lib/api/stats";
 
 export default function CoachOverviewPage() {
   const { error: showError } = useToast();
@@ -12,6 +13,14 @@ export default function CoachOverviewPage() {
   const [coachName, setCoachName] = useState<string>("");
   const [gymName, setGymName] = useState<string>("");
   const [upcoming, setUpcoming] = useState<Session[]>([]);
+  const [metrics, setMetrics] = useState({
+    totalSessions: 0,
+    upcomingSessions: 0,
+    completedSessions: 0,
+    totalEarnings: 0,
+  });
+  const [sessionsByMonth, setSessionsByMonth] = useState<Array<{ month: string; count: number }>>([]);
+  const [sessionsByStatus, setSessionsByStatus] = useState<Array<{ status: string; count: number }>>([]);
 
   useEffect(() => {
     (async () => {
@@ -23,6 +32,11 @@ export default function CoachOverviewPage() {
 
         const sessionsRes = await getMySessions({ page: 1, limit: 5, sortBy: "session_date", sortDir: "asc" });
         setUpcoming(sessionsRes.data);
+
+        const statsRes = await getCoachStats();
+        setMetrics(statsRes.metrics);
+        setSessionsByMonth(statsRes.charts.sessionsByMonth || []);
+        setSessionsByStatus(statsRes.charts.sessionsByStatus || []);
       } catch (e: unknown) {
         showError(e instanceof Error ? e.message : "Failed to load coach overview");
       } finally {
@@ -55,14 +69,89 @@ export default function CoachOverviewPage() {
               </div>
               <div className="rounded-2xl border border-stone-100 bg-stone-50 p-4 dark:border-stone-700 dark:bg-stone-900/40">
                 <p className="text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">
-                  Next sessions
+                  Upcoming sessions
                 </p>
                 <p className="mt-1 text-3xl font-semibold text-stone-900 dark:text-stone-50">
-                  {upcoming.length}
+                  {metrics.upcomingSessions}
                 </p>
                 <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
-                  Upcoming booked sessions (next few records)
+                  Booked sessions from today onwards
                 </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl border border-stone-100 bg-white p-4 dark:border-stone-700 dark:bg-stone-900/60">
+                <p className="text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                  Total sessions
+                </p>
+                <p className="mt-1 text-3xl font-semibold text-stone-900 dark:text-stone-50">
+                  {metrics.totalSessions}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-stone-100 bg-white p-4 dark:border-stone-700 dark:bg-stone-900/60">
+                <p className="text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                  Completed sessions
+                </p>
+                <p className="mt-1 text-3xl font-semibold text-stone-900 dark:text-stone-50">
+                  {metrics.completedSessions}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-stone-100 bg-white p-4 dark:border-stone-700 dark:bg-stone-900/60">
+                <p className="text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                  Estimated earnings
+                </p>
+                <p className="mt-1 text-3xl font-semibold text-stone-900 dark:text-stone-50">
+                  ${metrics.totalEarnings.toFixed(2)}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl border border-stone-100 bg-white p-4 dark:border-stone-700 dark:bg-stone-900/60">
+                <h3 className="text-sm font-semibold text-stone-900 dark:text-stone-50">Sessions by month</h3>
+                <div className="mt-4 space-y-2">
+                  {sessionsByMonth.length === 0 ? (
+                    <p className="text-sm text-stone-500 dark:text-stone-400">No data yet.</p>
+                  ) : (
+                    sessionsByMonth.map((m) => {
+                      const max = Math.max(...sessionsByMonth.map((x) => x.count), 1);
+                      const widthPct = Math.max(8, Math.round((m.count / max) * 100));
+                      return (
+                        <div key={m.month}>
+                          <div className="mb-1 flex items-center justify-between text-xs text-stone-500 dark:text-stone-400">
+                            <span>{m.month}</span>
+                            <span>{m.count}</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-stone-100 dark:bg-stone-800">
+                            <div className="h-2 rounded-full bg-brand-500" style={{ width: `${widthPct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-stone-100 bg-white p-4 dark:border-stone-700 dark:bg-stone-900/60">
+                <h3 className="text-sm font-semibold text-stone-900 dark:text-stone-50">Sessions by status</h3>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {sessionsByStatus.length === 0 ? (
+                    <p className="text-sm text-stone-500 dark:text-stone-400">No data yet.</p>
+                  ) : (
+                    sessionsByStatus.map((s) => (
+                      <div
+                        key={s.status}
+                        className="rounded-xl border border-stone-100 bg-stone-50 p-3 dark:border-stone-700 dark:bg-stone-800"
+                      >
+                        <p className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                          {s.status}
+                        </p>
+                        <p className="mt-1 text-xl font-semibold text-stone-900 dark:text-stone-50">{s.count}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
 

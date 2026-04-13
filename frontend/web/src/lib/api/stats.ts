@@ -63,3 +63,29 @@ export async function getOverviewStats() {
   const res = await apiClient.get<OverviewResponse>(`${BASE}/stats/overview`);
   return res.data;
 }
+
+export type CoachStatsResponse = {
+  success: boolean;
+  coach: {
+    id: number;
+    gym_id: number;
+    gym_name: string;
+    first_name: string;
+    last_name: string;
+  };
+  metrics: {
+    totalSessions: number;
+    upcomingSessions: number;
+    completedSessions: number;
+    totalEarnings: number;
+  };
+  charts: {
+    sessionsByMonth: { month: string; count: number }[];
+    sessionsByStatus: { status: string; count: number }[];
+  };
+};
+
+export async function getCoachStats() {
+  const res = await apiClient.get<CoachStatsResponse>(`${BASE}/coach/stats`);
+  return res.data;
+}

@@ -189,4 +189,99 @@ async function overview(req, res, next) {
   }
 }
 
-module.exports = { overview };
+async function coachOverview(req, res, next) {
+  try {
+    const userId = req.user && req.user.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+
+    const [coachRows] = await pool.query(
+      `
+        SELECT c.id, c.gym_id, c.gym_share_percentage, c.price_per_session,
+               g.name AS gym_name,
+               u.first_name AS coach_first_name,
+               u.last_name AS coach_last_name
+        FROM coaches c
+        JOIN gyms g ON g.id = c.gym_id AND g.deleted_at IS NULL
+        JOIN users u ON u.id = c.user_id
+        WHERE c.user_id = ? AND c.deleted_at IS NULL AND c.is_active = 1
+        ORDER BY c.id DESC
+        LIMIT 1
+      `,
+      [userId],
+    );
+    const coach = coachRows[0];
+    if (!coach) return res.status(404).json({ success: false, error: 'Coach profile not found' });
+
+    const coachId = Number(coach.id);
+    const [metricRows] = await pool.query(
+      `
+        SELECT
+          COUNT(*) AS total_sessions,
+          SUM(CASE WHEN s.session_date >= CURDATE() AND s.status = 'booked' THEN 1 ELSE 0 END) AS upcoming_sessions,
+          SUM(CASE WHEN s.status = 'completed' THEN 1 ELSE 0 END) AS completed_sessions,
+          COALESCE(SUM(
+            CASE
+              WHEN s.status IN ('booked', 'completed') THEN
+                COALESCE(s.price, 0) * (1 - COALESCE(c.gym_share_percentage, 0) / 100)
+              ELSE 0
+            END
+          ), 0) AS total_earnings
+        FROM sessions s
+        JOIN coaches c ON c.id = s.coach_id
+        WHERE s.deleted_at IS NULL
+          AND s.coach_id = ?
+      `,
+      [coachId],
+    );
+    const metrics = {
+      totalSessions: Number(metricRows[0].total_sessions || 0),
+      upcomingSessions: Number(metricRows[0].upcoming_sessions || 0),
+      completedSessions: Number(metricRows[0].completed_sessions || 0),
+      totalEarnings: Number(metricRows[0].total_earnings || 0),
+    };
+
+    const [sessionsByMonth] = await pool.query(
+      `
+        SELECT DATE_FORMAT(s.session_date, '%Y-%m') AS month, COUNT(*) AS count
+        FROM sessions s
+        WHERE s.deleted_at IS NULL
+          AND s.coach_id = ?
+          AND s.session_date >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+        GROUP BY month
+        ORDER BY month ASC
+      `,
+      [coachId],
+    );
+
+    const [sessionsByStatus] = await pool.query(
+      `
+        SELECT s.status, COUNT(*) AS count
+        FROM sessions s
+        WHERE s.deleted_at IS NULL
+          AND s.coach_id = ?
+        GROUP BY s.status
+      `,
+      [coachId],
+    );
+
+    res.json({
+      success: true,
+      coach: {
+        id: coachId,
+        gym_id: Number(coach.gym_id),
+        gym_name: coach.gym_name,
+        first_name: coach.coach_first_name,
+        last_name: coach.coach_last_name,
+      },
+      metrics,
+      charts: {
+        sessionsByMonth: sessionsByMonth.map((r) => ({ month: r.month, count: Number(r.count) })),
+        sessionsByStatus: sessionsByStatus.map((r) => ({ status: r.status, count: Number(r.count) })),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { overview, coachOverview };
