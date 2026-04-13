@@ -49,3 +49,23 @@ export async function registerUser(params: {
   return res.data;
 }
 
+export async function requestForgotPasswordOtp(email: string) {
+  const res = await apiClient.post<{ success: boolean; message: string; expires_in_minutes?: number }>(
+    "/api/auth/forgot-password/request-otp",
+    { email },
+  );
+  return res.data;
+}
+
+export async function resetPasswordWithOtp(params: {
+  email: string;
+  otp: string;
+  new_password: string;
+}) {
+  const res = await apiClient.post<{ success: boolean; message: string }>(
+    "/api/auth/forgot-password/reset",
+    params,
+  );
+  return res.data;
+}
+

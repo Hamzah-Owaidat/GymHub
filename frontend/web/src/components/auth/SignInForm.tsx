@@ -128,7 +128,7 @@ export default function SignInForm() {
                     </span>
                   </div>
                   <Link
-                    href="/reset-password"
+                    href="/auth/reset-password"
                     className="text-sm text-orange-500 hover:text-orange-600 dark:text-yellow-300"
                   >
                     Forgot password?

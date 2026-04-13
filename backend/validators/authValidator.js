@@ -37,4 +37,33 @@ const loginRules = [
   body('loginAs').optional().trim().custom((v) => !v || isValidRole(v)).withMessage(`loginAs must be one of: ${ROLES.join(', ')}`),
 ];
 
-module.exports = { validate, registerRules, loginRules };
+const requestResetOtpRules = [
+  body('email')
+    .trim()
+    .isEmail()
+    .withMessage('Valid email is required')
+    .customSanitizer((v) => String(v).trim().toLowerCase()),
+];
+
+const resetPasswordWithOtpRules = [
+  body('email')
+    .trim()
+    .isEmail()
+    .withMessage('Valid email is required')
+    .customSanitizer((v) => String(v).trim().toLowerCase()),
+  body('otp')
+    .customSanitizer((v) => String(v || '').replace(/\D/g, '').slice(0, 6))
+    .matches(/^\d{6}$/)
+    .withMessage('OTP must be exactly 6 digits'),
+  body('new_password')
+    .isLength({ min: 6 })
+    .withMessage('New password must be at least 6 characters'),
+];
+
+module.exports = {
+  validate,
+  registerRules,
+  loginRules,
+  requestResetOtpRules,
+  resetPasswordWithOtpRules,
+};

@@ -1,7 +1,17 @@
 const bcrypt = require('bcryptjs');
 const User = require('../../models/User');
+const PasswordResetOtp = require('../../models/PasswordResetOtp');
 const { signToken } = require('../../utils/jwt');
 const AppError = require('../../utils/AppError');
+const { sendPasswordResetOtpEmail } = require('../../utils/mailer');
+
+function generateSixDigitOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function normalizeOtpInput(value) {
+  return String(value || '').replace(/\D/g, '').slice(0, 6);
+}
 
 /**
  * Shared auth controller for API.
@@ -79,4 +89,75 @@ async function me(req, res, next) {
   }
 }
 
-module.exports = { register, login, me };
+async function requestPasswordResetOtp(req, res, next) {
+  try {
+    const isDev = (process.env.ENVIRONMENT || '').toLowerCase() !== 'production';
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!email) return next(new AppError('Email is required', 400));
+
+    const user = await User.findByEmail(email, { includePassword: false });
+    if (user && user.is_active) {
+      const otpCode = generateSixDigitOtp();
+      const expiresInMinutes = Number(process.env.PASSWORD_RESET_OTP_EXPIRES_MINUTES || 5);
+
+      await PasswordResetOtp.create({
+        user_id: user.id,
+        email: user.email,
+        otp_code: otpCode,
+        expires_in_minutes: expiresInMinutes,
+      });
+      await sendPasswordResetOtpEmail({ toEmail: user.email, otpCode });
+      if (isDev) {
+        console.log(`[forgot-password] OTP created for user_id=${user.id}, email=${user.email}`);
+      }
+    } else if (isDev) {
+      console.log(
+        `[forgot-password] No OTP created. user_found=${!!user}, active=${user ? !!user.is_active : false}, email=${email}`,
+      );
+    }
+
+    res.json({
+      success: true,
+      message: `If this email exists, an OTP has been sent. The OTP expires in ${Number(process.env.PASSWORD_RESET_OTP_EXPIRES_MINUTES || 5)} minutes.`,
+      expires_in_minutes: Number(process.env.PASSWORD_RESET_OTP_EXPIRES_MINUTES || 5),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function resetPasswordWithOtp(req, res, next) {
+  try {
+    const isDev = (process.env.ENVIRONMENT || '').toLowerCase() !== 'production';
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const otp = normalizeOtpInput(req.body?.otp);
+    const newPassword = String(req.body?.new_password || '');
+
+    const activeOtp = await PasswordResetOtp.findValidByEmailAndCode(email, otp);
+    if (!activeOtp) {
+      if (isDev) {
+        const latest = await PasswordResetOtp.findLatestActiveByEmail(email);
+        const sameCodeAnyState = await PasswordResetOtp.findLatestByEmailAndCode(email, otp);
+        console.log(
+          `[forgot-password] Reset failed for email=${email}. latest_exists=${!!latest} ` +
+          `latest_expires_at=${latest ? latest.expires_at : 'n/a'} latest_code=${latest ? latest.otp_code : 'n/a'} ` +
+          `submitted_otp=${otp} same_code_record_exists=${!!sameCodeAnyState}`,
+        );
+      }
+      const sameCode = await PasswordResetOtp.findLatestByEmailAndCode(email, otp);
+      if (sameCode) return next(new AppError('OTP is expired. Please request a new one.', 400));
+      return next(new AppError('Incorrect OTP code.', 400));
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const updated = await User.updatePasswordById(activeOtp.user_id, passwordHash);
+    if (!updated) return next(new AppError('Unable to reset password', 500));
+
+    await PasswordResetOtp.consume(activeOtp.id);
+    res.json({ success: true, message: 'Password reset successful. You can now sign in.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { register, login, me, requestPasswordResetOtp, resetPasswordWithOtp };

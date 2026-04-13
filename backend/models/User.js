@@ -24,7 +24,7 @@ const SELECT_USER_WITH_PASSWORD = `
  */
 async function findByEmail(email, opts = {}) {
   const sql = opts.includePassword ? SELECT_USER_WITH_PASSWORD : SELECT_USER_WITH_ROLE;
-  const clause = ' AND u.email = ? LIMIT 1';
+  const clause = ' AND LOWER(TRIM(u.email)) = LOWER(TRIM(?)) LIMIT 1';
   const [rows] = await pool.query(sql + clause, [email]);
   const row = rows[0] || null;
   return row ? formatUserRow(row, opts.includePassword) : null;
@@ -293,10 +293,20 @@ async function getRoleIdByName(name) {
  */
 async function existsByEmail(email) {
   const [rows] = await pool.query(
-    'SELECT 1 FROM users WHERE email = ? AND deleted_at IS NULL LIMIT 1',
+    'SELECT 1 FROM users WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) AND deleted_at IS NULL LIMIT 1',
     [email]
   );
   return rows.length > 0;
+}
+
+async function updatePasswordById(id, passwordHash) {
+  const [result] = await pool.query(
+    `UPDATE users
+     SET password = ?, updated_at = NOW()
+     WHERE id = ? AND deleted_at IS NULL`,
+    [passwordHash, id],
+  );
+  return result.affectedRows > 0;
 }
 
 function formatUserRow(row, includePassword = false) {
@@ -326,6 +336,7 @@ module.exports = {
   create,
   getRoleIdByName,
   existsByEmail,
+  updatePasswordById,
   update,
   softDelete,
 };
