@@ -2,24 +2,50 @@
 
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import Pagination from "@/components/common/Pagination";
+import Input from "@/components/form/input/InputField";
+import Label from "@/components/form/Label";
+import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/context/ToastContext";
-import { getMySessions, type Session } from "@/lib/api/sessions";
+import { DownloadIcon, TrashBinIcon } from "@/icons";
+import {
+  cancelMySession,
+  createMySession,
+  exportMySessions,
+  getMySessionUsers,
+  getMySessions,
+  updateMySession,
+  type CoachSessionUser,
+  type Session,
+} from "@/lib/api/sessions";
 import React, { useEffect, useState } from "react";
 
-type SessionModalMode = "view" | null;
+type SessionModalMode = "view" | "create" | "edit" | null;
+
+const emptyForm = {
+  user_id: "",
+  session_date: "",
+  start_time: "",
+  end_time: "",
+  price: "",
+  is_private: true,
+};
 
 export default function CoachSessionsPage() {
-  const { error: showError } = useToast();
+  const { error: showError, success: showSuccess } = useToast();
 
   const [data, setData] = useState<Session[]>([]);
+  const [users, setUsers] = useState<CoachSessionUser[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 5, total: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | "booked" | "completed" | "cancelled">("");
 
   const [modalMode, setModalMode] = useState<SessionModalMode>(null);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [form, setForm] = useState({ ...emptyForm });
 
   const load = async () => {
     setLoading(true);
@@ -39,9 +65,22 @@ export default function CoachSessionsPage() {
     }
   };
 
+  const loadUsers = async () => {
+    try {
+      const res = await getMySessionUsers();
+      setUsers(res.data || []);
+    } catch (e: unknown) {
+      showError(e instanceof Error ? e.message : "Failed to load clients");
+    }
+  };
+
   useEffect(() => {
     load();
   }, [pagination.page, pagination.limit, search, statusFilter]);
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
 
   useEffect(() => {
     if (searchInput === "") {
@@ -58,6 +97,27 @@ export default function CoachSessionsPage() {
     return () => window.clearTimeout(id);
   }, [searchInput]);
 
+  const resetForm = () => setForm({ ...emptyForm });
+
+  const openCreateModal = () => {
+    resetForm();
+    setSelectedSession(null);
+    setModalMode("create");
+  };
+
+  const openEditModal = (session: Session) => {
+    setSelectedSession(session);
+    setForm({
+      user_id: String(session.user_id),
+      session_date: session.session_date ? session.session_date.slice(0, 10) : "",
+      start_time: session.start_time,
+      end_time: session.end_time,
+      price: session.price != null ? String(session.price) : "",
+      is_private: !!session.is_private,
+    });
+    setModalMode("edit");
+  };
+
   const openViewModal = (session: Session) => {
     setSelectedSession(session);
     setModalMode("view");
@@ -66,6 +126,72 @@ export default function CoachSessionsPage() {
   const handleCloseModal = () => {
     setModalMode(null);
     setSelectedSession(null);
+    setSaving(false);
+  };
+
+  const handleCancelSession = async (session: Session) => {
+    if (session.status === "completed") {
+      showError("Completed sessions cannot be cancelled.");
+      return;
+    }
+    if (!window.confirm(`Cancel session #${session.id}?`)) return;
+    try {
+      await cancelMySession(session.id);
+      showSuccess("Session cancelled");
+      load();
+    } catch (e: unknown) {
+      showError(e instanceof Error ? e.message : "Cancel failed");
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modalMode || modalMode === "view") return;
+
+    if (!form.user_id) return showError("Client is required.");
+    if (!form.session_date) return showError("Session date is required.");
+    if (!form.start_time || !form.end_time) return showError("Start and end time are required.");
+    if (form.start_time >= form.end_time) return showError("Start time must be before end time.");
+
+    setSaving(true);
+    try {
+      const payload = {
+        user_id: Number(form.user_id),
+        session_date: form.session_date.slice(0, 10),
+        start_time: form.start_time,
+        end_time: form.end_time,
+        price: form.price ? Number(form.price) : null,
+        is_private: form.is_private,
+      };
+      if (modalMode === "create") {
+        await createMySession(payload);
+        showSuccess("Session created successfully");
+      } else if (selectedSession) {
+        await updateMySession(selectedSession.id, payload);
+        showSuccess("Session updated successfully");
+      }
+      handleCloseModal();
+      load();
+    } catch (e: unknown) {
+      showError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await exportMySessions({
+        search: search || undefined,
+        status: statusFilter || undefined,
+      });
+      showSuccess("Sessions exported");
+    } catch (e: unknown) {
+      showError(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -114,6 +240,24 @@ export default function CoachSessionsPage() {
                 <option value="cancelled">Cancelled</option>
               </select>
             </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="inline-flex items-center rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+              >
+                Add Session
+              </button>
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={exporting}
+                className="inline-flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm font-medium dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 disabled:opacity-50"
+              >
+                <DownloadIcon className="h-4 w-4" />
+                Export Excel
+              </button>
+            </div>
           </div>
         </div>
 
@@ -153,13 +297,31 @@ export default function CoachSessionsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => openViewModal(row)}
-                        className="text-xs font-medium text-brand-500 hover:text-brand-600"
-                      >
-                        View
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => openViewModal(row)}
+                          className="text-xs font-medium text-stone-500 hover:text-stone-700 dark:text-stone-300 dark:hover:text-white"
+                        >
+                          View
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(row)}
+                          disabled={row.status === "completed"}
+                          className="text-xs font-medium text-brand-500 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCancelSession(row)}
+                          disabled={row.status === "completed"}
+                          className="text-red-500 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <TrashBinIcon className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -176,6 +338,115 @@ export default function CoachSessionsPage() {
           />
         </div>
       </div>
+
+      <Modal isOpen={!!modalMode} onClose={handleCloseModal} className="max-w-[640px] m-4">
+        <div className="no-scrollbar relative w-full max-w-[640px] overflow-y-auto rounded-3xl bg-white p-4 dark:bg-stone-900 md:p-8">
+          <div className="px-1 pr-10">
+            <h4 className="mb-1 text-xl font-semibold text-stone-900 dark:text-stone-50">
+              {modalMode === "create" && "Add Session"}
+              {modalMode === "edit" && "Edit Session"}
+              {modalMode === "view" && "Session Details"}
+            </h4>
+          </div>
+
+          {modalMode === "view" && selectedSession ? (
+            <div className="mt-6 space-y-3 px-1 text-sm text-stone-700 dark:text-stone-200">
+              <p><span className="font-medium">Client:</span> {selectedSession.user_first_name} {selectedSession.user_last_name}</p>
+              <p><span className="font-medium">Gym:</span> {selectedSession.gym_name || `#${selectedSession.gym_id}`}</p>
+              <p><span className="font-medium">Date:</span> {selectedSession.session_date}</p>
+              <p><span className="font-medium">Time:</span> {selectedSession.start_time} - {selectedSession.end_time}</p>
+              <p><span className="font-medium">Price:</span> {selectedSession.price ?? "N/A"}</p>
+              <p><span className="font-medium">Status:</span> {selectedSession.status}</p>
+            </div>
+          ) : (
+            <form className="mt-6 space-y-6 px-1" onSubmit={handleSubmit}>
+              <div>
+                <Label>Client</Label>
+                <select
+                  value={form.user_id}
+                  onChange={(e) => setForm((f) => ({ ...f, user_id: e.target.value }))}
+                  className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                >
+                  <option value="">Select client</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.first_name} {u.last_name} ({u.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <Label>Session Date</Label>
+                  <Input
+                    type="date"
+                    value={form.session_date}
+                    onChange={(e) => setForm((f) => ({ ...f, session_date: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>Price</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={form.price}
+                    onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                    placeholder="Leave empty for default"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <Label>Start Time</Label>
+                  <Input
+                    type="time"
+                    value={form.start_time}
+                    onChange={(e) => setForm((f) => ({ ...f, start_time: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>End Time</Label>
+                  <Input
+                    type="time"
+                    value={form.end_time}
+                    onChange={(e) => setForm((f) => ({ ...f, end_time: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  id="is_private"
+                  type="checkbox"
+                  checked={form.is_private}
+                  onChange={(e) => setForm((f) => ({ ...f, is_private: e.target.checked }))}
+                />
+                <Label htmlFor="is_private">Private session</Label>
+              </div>
+
+              <div className="mt-4 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  className="inline-flex items-center rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60"
+                >
+                  {saving ? "Saving..." : modalMode === "create" ? "Create Session" : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

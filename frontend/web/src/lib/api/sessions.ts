@@ -64,6 +64,66 @@ export async function getMySessions(params?: {
   return { ...rest, pagination: normalizePagination(pagination) } as SessionListResponse;
 }
 
+export type CoachSessionUser = {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+};
+
+export async function getMySessionUsers() {
+  const res = await apiClient.get<{ success: boolean; data: CoachSessionUser[] }>(`${BASE}/coach/session-users`);
+  return res.data;
+}
+
+export async function createMySession(body: {
+  user_id: number;
+  session_date: string;
+  start_time: string;
+  end_time: string;
+  price?: number | null;
+  is_private?: boolean;
+}) {
+  const res = await apiClient.post<{ success: boolean; session: Session }>(`${BASE}/coach/sessions`, body);
+  return res.data;
+}
+
+export async function updateMySession(
+  id: number,
+  body: Partial<{
+    user_id: number;
+    session_date: string;
+    start_time: string;
+    end_time: string;
+    price: number | null;
+    is_private: boolean;
+  }>,
+) {
+  const res = await apiClient.put<{ success: boolean; session: Session }>(`${BASE}/coach/sessions/${id}`, body);
+  return res.data;
+}
+
+export async function cancelMySession(id: number) {
+  const res = await apiClient.post<{ success: boolean; session: Session }>(`${BASE}/coach/sessions/${id}/cancel`);
+  return res.data;
+}
+
+export async function exportMySessions(params?: {
+  search?: string;
+  status?: string;
+}) {
+  const res = await apiClient.get<Blob>(`${BASE}/coach/sessions/export`, {
+    params,
+    responseType: "blob",
+  });
+  const url = URL.createObjectURL(res.data);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "coach-sessions.xlsx";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function createSession(body: {
   user_id: number;
   gym_id: number;

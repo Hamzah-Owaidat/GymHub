@@ -106,6 +106,11 @@ router.delete('/payments/:id', ...shared, paymentController.remove);
 router.get('/coach/me', requireCoach, coachController.getSelfProfile);
 router.put('/coach/availability', requireCoach, coachController.updateMyAvailability);
 router.get('/coach/sessions', requireCoach, coachController.listMySessions);
+router.get('/coach/sessions/export', requireCoach, coachController.exportMySessions);
+router.get('/coach/session-users', requireCoach, coachController.listMySessionUsers);
+router.post('/coach/sessions', requireCoach, coachController.createMySession);
+router.put('/coach/sessions/:id', requireCoach, coachController.updateMySession);
+router.post('/coach/sessions/:id/cancel', requireCoach, coachController.cancelMySession);
 router.get('/coach/stats', requireCoach, statsController.coachOverview);
 
 module.exports = router;
