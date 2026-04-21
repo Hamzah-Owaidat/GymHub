@@ -12,15 +12,20 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  bool _navigated = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final auth = context.watch<AuthProvider>();
-    if (!auth.loading) {
+    if (!auth.loading && !_navigated) {
+      _navigated = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.pushReplacementNamed(
+        if (!mounted) return;
+        Navigator.pushNamedAndRemoveUntil(
           context,
           auth.isAuthenticated ? AppRouter.app : AppRouter.signIn,
+          (_) => false,
         );
       });
     }

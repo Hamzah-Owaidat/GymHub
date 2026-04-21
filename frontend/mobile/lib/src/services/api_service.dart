@@ -3,11 +3,17 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'storage_service.dart';
 
+typedef UnauthorizedHandler = Future<void> Function();
+
 class ApiService {
   ApiService._();
   static final ApiService instance = ApiService._();
 
   final _storage = StorageService();
+
+  // Set by AuthProvider so we can clear state when the backend says the token
+  // is no longer valid (e.g. expired / revoked).
+  UnauthorizedHandler? onUnauthorized;
 
   late final Dio dio = Dio(
     BaseOptions(
@@ -25,6 +31,19 @@ class ApiService {
           }
           handler.next(options);
         },
+        onError: (err, handler) async {
+          if (err.response?.statusCode == 401) {
+            // Auth is no longer valid — wipe local session so the UI can bounce
+            // the user back to sign-in.
+            final cb = onUnauthorized;
+            if (cb != null) {
+              await cb();
+            } else {
+              await _storage.clearAuth();
+            }
+          }
+          handler.next(err);
+        },
       ),
     );
 
@@ -37,9 +56,19 @@ class ApiService {
     return 'Unexpected error';
   }
 
-  Future<Map<String, dynamic>> login(String email, String password) async {
+  // ---------- Auth ----------
+
+  Future<Map<String, dynamic>> login(
+    String email,
+    String password, {
+    bool rememberMe = true,
+  }) async {
     try {
-      final res = await dio.post('/api/auth/login', data: {'email': email, 'password': password});
+      final res = await dio.post('/api/auth/login', data: {
+        'email': email,
+        'password': password,
+        'rememberMe': rememberMe,
+      });
       return Map<String, dynamic>.from(res.data as Map);
     } catch (e) {
       throw Exception(_extractError(e));
@@ -49,6 +78,15 @@ class ApiService {
   Future<void> register(Map<String, dynamic> body) async {
     try {
       await dio.post('/api/auth/register', data: body);
+    } catch (e) {
+      throw Exception(_extractError(e));
+    }
+  }
+
+  Future<Map<String, dynamic>> me() async {
+    try {
+      final res = await dio.get('/api/auth/me');
+      return Map<String, dynamic>.from(res.data as Map);
     } catch (e) {
       throw Exception(_extractError(e));
     }
@@ -74,23 +112,77 @@ class ApiService {
     }
   }
 
-  Future<List<dynamic>> getGyms() async {
+  // ---------- Gyms ----------
+
+  Future<List<dynamic>> getGyms({String? search}) async {
     try {
-      final res = await dio.get('/api/user/gyms');
+      final res = await dio.get(
+        '/api/user/gyms',
+        queryParameters: {
+          if (search != null && search.isNotEmpty) 'search': search,
+        },
+      );
       return (res.data['data'] as List<dynamic>? ?? []);
     } catch (e) {
       throw Exception(_extractError(e));
     }
   }
 
-  Future<Map<String, dynamic>> getGymById(int id) async {
+  /// Returns `{ data: List, total: int }` so we can show a stat count on Home.
+  Future<Map<String, dynamic>> getGymsPaged({
+    String? search,
+    int page = 1,
+    int limit = 20,
+  }) async {
     try {
-      final res = await dio.get('/api/user/gyms/$id');
-      return Map<String, dynamic>.from(res.data['gym'] as Map);
+      final res = await dio.get(
+        '/api/user/gyms',
+        queryParameters: {
+          if (search != null && search.isNotEmpty) 'search': search,
+          'page': page,
+          'limit': limit,
+        },
+      );
+      final body = Map<String, dynamic>.from(res.data as Map);
+      final List data = (body['data'] as List?) ?? const [];
+      final pagination = body['pagination'] as Map? ?? const {};
+      final total = pagination['total'] is int
+          ? pagination['total'] as int
+          : int.tryParse('${pagination['total'] ?? ''}') ?? data.length;
+      return {'data': data, 'total': total};
     } catch (e) {
       throw Exception(_extractError(e));
     }
   }
+
+  /// Returns the full gym payload: { gym, images, plans, coaches,
+  /// activeSubscription, userRating }.
+  Future<Map<String, dynamic>> getGymDetails(int id) async {
+    try {
+      final res = await dio.get('/api/user/gyms/$id');
+      return Map<String, dynamic>.from(res.data as Map);
+    } catch (e) {
+      throw Exception(_extractError(e));
+    }
+  }
+
+  Future<Map<String, dynamic>> getCoachAvailability({
+    required int coachId,
+    required int gymId,
+    required String date,
+  }) async {
+    try {
+      final res = await dio.get(
+        '/api/user/coaches/$coachId/availability',
+        queryParameters: {'gym_id': gymId, 'date': date},
+      );
+      return Map<String, dynamic>.from(res.data as Map);
+    } catch (e) {
+      throw Exception(_extractError(e));
+    }
+  }
+
+  // ---------- Sessions ----------
 
   Future<List<dynamic>> getSessions() async {
     try {
@@ -101,21 +193,45 @@ class ApiService {
     }
   }
 
-  Future<void> bookSession(Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> bookSession(Map<String, dynamic> body) async {
     try {
-      await dio.post('/api/user/sessions/book', data: body);
+      final res = await dio.post('/api/user/sessions/book', data: body);
+      return Map<String, dynamic>.from(res.data as Map);
     } catch (e) {
       throw Exception(_extractError(e));
     }
   }
 
-  Future<void> subscribe(Map<String, dynamic> body) async {
+  // ---------- Subscriptions ----------
+
+  Future<Map<String, dynamic>> subscribe({
+    required int planId,
+    required String paymentMethod,
+    String? cardLast4,
+  }) async {
     try {
-      await dio.post('/api/user/subscriptions', data: body);
+      final res = await dio.post('/api/user/subscriptions', data: {
+        'plan_id': planId,
+        'payment_method': paymentMethod,
+        if (paymentMethod == 'card' && cardLast4 != null && cardLast4.isNotEmpty)
+          'card_last4': cardLast4,
+      });
+      return Map<String, dynamic>.from(res.data as Map);
     } catch (e) {
       throw Exception(_extractError(e));
     }
   }
+
+  Future<List<dynamic>> getMySubscriptions() async {
+    try {
+      final res = await dio.get('/api/user/subscriptions');
+      return (res.data['data'] as List<dynamic>? ?? []);
+    } catch (e) {
+      throw Exception(_extractError(e));
+    }
+  }
+
+  // ---------- Cards ----------
 
   Future<List<dynamic>> getCards() async {
     try {
@@ -126,9 +242,21 @@ class ApiService {
     }
   }
 
-  Future<void> createCard(Map<String, dynamic> body) async {
+  Future<void> createCard({
+    required String cardHolder,
+    required String cardNumber,
+    required String cardExpiry,
+    String? cardLabel,
+    bool isDefault = false,
+  }) async {
     try {
-      await dio.post('/api/user/cards', data: body);
+      await dio.post('/api/user/cards', data: {
+        if (cardLabel != null && cardLabel.isNotEmpty) 'card_label': cardLabel,
+        'card_holder': cardHolder,
+        'card_number': cardNumber,
+        'card_expiry': cardExpiry,
+        'is_default': isDefault,
+      });
     } catch (e) {
       throw Exception(_extractError(e));
     }
@@ -149,6 +277,8 @@ class ApiService {
       throw Exception(_extractError(e));
     }
   }
+
+  // ---------- Chat ----------
 
   Future<List<dynamic>> getChats() async {
     try {

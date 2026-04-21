@@ -15,12 +15,32 @@ class _SignInScreenState extends State<SignInScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _submitting = false;
+  bool _rememberMe = true;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
 
   Future<void> _submit() async {
+    if (_email.text.trim().isEmpty || _password.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter email and password')),
+      );
+      return;
+    }
     setState(() => _submitting = true);
     try {
-      await context.read<AuthProvider>().signIn(_email.text.trim(), _password.text);
-      if (mounted) Navigator.pushReplacementNamed(context, AppRouter.app);
+      await context.read<AuthProvider>().signIn(
+            _email.text.trim(),
+            _password.text,
+            rememberMe: _rememberMe,
+          );
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, AppRouter.app, (_) => false);
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -41,12 +61,37 @@ class _SignInScreenState extends State<SignInScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('GYMHUB', style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: const Color(0xFFFF7A00), fontWeight: FontWeight.w900)),
+                Text(
+                  'GYMHUB',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        color: const Color(0xFFFF7A00),
+                        fontWeight: FontWeight.w900,
+                      ),
+                ),
                 const SizedBox(height: 24),
-                TextField(controller: _email, decoration: const InputDecoration(labelText: 'Email')),
+                TextField(
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Email'),
+                ),
                 const SizedBox(height: 12),
-                TextField(controller: _password, obscureText: true, decoration: const InputDecoration(labelText: 'Password')),
-                const SizedBox(height: 16),
+                TextField(
+                  controller: _password,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Password'),
+                  onSubmitted: (_) => _submit(),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: _rememberMe,
+                      onChanged: (v) => setState(() => _rememberMe = v ?? false),
+                    ),
+                    const Text('Keep me signed in'),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
