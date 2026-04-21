@@ -3,11 +3,11 @@ import Checkbox from "@/components/form/input/Checkbox";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import Button from "@/components/ui/button/Button";
-import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "@/icons";
+import { EyeCloseIcon, EyeIcon } from "@/icons";
 import { useAuthStore } from "@/store/authStore";
 import { useToast } from "@/context/ToastContext";
 import { login } from "@/lib/auth";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 
@@ -18,24 +18,29 @@ export default function SignInForm() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-   const [emailError, setEmailError] = useState<string | null>(null);
-   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { setAuth, isAuthenticated } = useAuthStore();
   const { error: showErrorToast, success: showSuccessToast } = useToast();
 
   useEffect(() => {
-    // If there is already a token in local/session storage or the store is authenticated,
-    // redirect away from the sign-in page to prevent duplicate login.
-    if (typeof window !== "undefined") {
-      const token =
-        window.localStorage.getItem("gymhub_token") ||
-        window.sessionStorage.getItem("gymhub_token");
-      if (token || isAuthenticated) {
-        router.replace("/");
-      }
+    if (typeof window === "undefined") return;
+
+    // If we were redirected here because of an expired / invalid / missing
+    // session, do NOT show any toast – the user knows they need to sign in.
+    // Also do not auto-redirect away from this page in those cases.
+    const reason = searchParams.get("reason");
+    if (reason) return;
+
+    const token =
+      window.localStorage.getItem("gymhub_token") ||
+      window.sessionStorage.getItem("gymhub_token");
+    if (token || isAuthenticated) {
+      router.replace("/");
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, router, searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -56,12 +61,20 @@ export default function SignInForm() {
 
     setLoading(true);
     try {
-      const data = await login(email, password);
-      setAuth({ user: data.user, token: data.token, rememberMe: isChecked });
+      const data = await login(email, password, isChecked);
+      setAuth({
+        user: data.user,
+        token: data.token,
+        rememberMe: isChecked,
+        permissions: data.permissions || [],
+      });
       showSuccessToast("Login successful. Welcome back!");
-      router.push("/");
-    } catch (err: any) {
-      const message = err.message || "Failed to sign in";
+
+      const next = searchParams.get("next");
+      const safeNext = next && next.startsWith("/") && !next.startsWith("/auth") ? next : "/";
+      router.push(safeNext);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to sign in";
       setError(message);
       showErrorToast(message);
     } finally {
@@ -81,6 +94,14 @@ export default function SignInForm() {
               Enter your email and password to sign in!
             </p>
           </div>
+          {error && (
+            <div
+              className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300"
+              role="alert"
+            >
+              {error}
+            </div>
+          )}
           <div>
             <form onSubmit={handleSubmit} className="mt-4 space-y-4">
               <div className="space-y-6">

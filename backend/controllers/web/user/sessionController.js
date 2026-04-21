@@ -209,6 +209,26 @@ async function book(req, res, next) {
       return next(new AppError('Invalid start_time or end_time format', 400));
     }
 
+    // Reject past sessions. If the date is in the past we block entirely.
+    // If the date is today we also block any start time that is already behind
+    // the current clock (so users can't book e.g. 08:00 at 13:34).
+    const now = new Date();
+    const sessionDateObj = new Date(`${session_date}T00:00:00`);
+    if (Number.isNaN(sessionDateObj.getTime())) {
+      return next(new AppError('Invalid session_date', 400));
+    }
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (sessionDateObj < todayStart) {
+      return next(new AppError('You cannot book a session on a past date', 400));
+    }
+    if (sessionDateObj.getTime() === todayStart.getTime()) {
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
+      const requestedStartMinutes = toMinutes(normalizedStart);
+      if (requestedStartMinutes !== null && requestedStartMinutes < nowMinutes) {
+        return next(new AppError('Start time is already in the past', 400));
+      }
+    }
+
     const availability = await buildCoachAvailabilityForDate(Number(coach_id), session_date);
     const requestedStart = toMinutes(normalizedStart);
     const requestedEnd = toMinutes(normalizedEnd);

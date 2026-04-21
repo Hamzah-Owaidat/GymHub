@@ -52,6 +52,17 @@ function formatDateIso(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+function formatDisplayDate(value: string | Date | null | undefined): string {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 const WEEK_DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
 const WEEK_DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
@@ -113,6 +124,26 @@ export default function GymDetailsPage() {
     bookPayMethod === "" ||
     (bookPayMethod === "card" && !bookSavedCardId && bookCardNumber.trim().length < 4);
 
+  // Re-render every minute so "past time" filtering stays in sync with the clock.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Earliest minute-of-day a user is allowed to pick as start time.
+  // When the selected date is today, we block any time already past (plus a
+  // small buffer so the user has time to complete the form). When the selected
+  // date is in the future, there is no lower bound.
+  const BOOKING_LEAD_MINUTES = 5;
+  const minStartMinuteForDate = (() => {
+    if (!bookDate) return -Infinity;
+    const now = new Date(nowTick);
+    const nowIso = formatDateIso(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
+    if (bookDate !== nowIso) return -Infinity;
+    return now.getHours() * 60 + now.getMinutes() + BOOKING_LEAD_MINUTES;
+  })();
+
   const availableStartOptions = (() => {
     if (!availabilityInfo) return [];
     const options: Array<{ time: string; slot_mode: "private_only" | "public_only" | "both" }> = [];
@@ -121,6 +152,7 @@ export default function GymDetailsPage() {
       const end = toMinutes(window.end_time);
       if (start === null || end === null) continue;
       for (let current = start; current + 30 <= end; current += 30) {
+        if (current < minStartMinuteForDate) continue;
         options.push({ time: minuteToTime(current), slot_mode: window.slot_mode });
       }
     }
@@ -477,7 +509,7 @@ export default function GymDetailsPage() {
             {activeSub && (
               <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                Subscribed until {activeSub.end_date}
+                Subscribed until {formatDisplayDate(activeSub.end_date)}
               </span>
             )}
           </div>
@@ -1001,7 +1033,7 @@ export default function GymDetailsPage() {
                 {activeSub ? (
                   <div className="mt-3 rounded-xl bg-emerald-50 p-4 dark:bg-emerald-950/30">
                     <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">You are subscribed!</p>
-                    <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">Valid until {activeSub.end_date}. You can book sessions at no extra cost.</p>
+                    <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">Valid until {formatDisplayDate(activeSub.end_date)}. You can book sessions at no extra cost.</p>
                   </div>
                 ) : (
                   <>

@@ -8,12 +8,15 @@ export type AuthUser = {
   role?: string;
   role_id?: number;
   profile_image?: string | null;
+  is_active?: boolean;
 };
 
 export type LoginResponse = {
   success: boolean;
   token: string;
   user: AuthUser;
+  permissions?: string[];
+  remember_me?: boolean;
 };
 
 export type RegisterResponse = {
@@ -25,11 +28,23 @@ export type RegisterResponse = {
   message?: string;
 };
 
-export async function login(email: string, password: string) {
+export type MeResponse = {
+  success: boolean;
+  user: AuthUser;
+  permissions?: string[];
+};
+
+export async function login(email: string, password: string, rememberMe = false) {
   const res = await apiClient.post<LoginResponse>("/api/auth/login", {
     email,
     password,
+    rememberMe,
   });
+  return res.data;
+}
+
+export async function fetchMe() {
+  const res = await apiClient.get<MeResponse>("/api/auth/me");
   return res.data;
 }
 
@@ -68,4 +83,3 @@ export async function resetPasswordWithOtp(params: {
   );
   return res.data;
 }
-

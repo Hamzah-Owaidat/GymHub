@@ -14,16 +14,16 @@ function requireRole(...allowedRoles) {
 
   return (req, res, next) => {
     if (!req.user) {
-      return next(new AppError('Authentication required', 401));
+      return next(new AppError('Authentication required', 401, 'NO_TOKEN'));
     }
 
     const role = req.user.role;
     if (!role || !isValidRole(role)) {
-      return next(new AppError('Invalid role', 403));
+      return next(new AppError('Invalid role', 403, 'FORBIDDEN_ROLE'));
     }
 
     if (!allowedSet.has(role)) {
-      return next(new AppError('Insufficient permissions', 403));
+      return next(new AppError('Insufficient permissions', 403, 'FORBIDDEN_ROLE'));
     }
 
     next();
@@ -36,11 +36,11 @@ function requireRole(...allowedRoles) {
  */
 function requireActive(req, res, next) {
   if (!req.user) {
-    return next(new AppError('Authentication required', 401));
+    return next(new AppError('Authentication required', 401, 'NO_TOKEN'));
   }
 
   if (req.user.is_active === false) {
-    return next(new AppError('Account is deactivated', 403));
+    return next(new AppError('Account is deactivated', 403, 'ACCOUNT_INACTIVE'));
   }
 
   next();
@@ -54,17 +54,17 @@ function requireActive(req, res, next) {
 function requirePermission(permissionCode) {
   return async (req, res, next) => {
     if (!req.user) {
-      return next(new AppError('Authentication required', 401));
+      return next(new AppError('Authentication required', 401, 'NO_TOKEN'));
     }
     if (!isValidPermission(permissionCode)) {
-      return next(new AppError('Invalid permission', 500));
+      return next(new AppError('Invalid permission', 500, 'SERVER_CONFIG'));
     }
     let permissions = req.user.permissions;
     if (!Array.isArray(permissions)) {
       const roleId = req.user.role_id;
       const roleName = req.user.role;
       if (!roleId && !roleName) {
-        return next(new AppError('Insufficient permissions', 403));
+        return next(new AppError('Insufficient permissions', 403, 'FORBIDDEN_PERMISSION'));
       }
       try {
         let rows;
@@ -92,7 +92,7 @@ function requirePermission(permissionCode) {
       }
     }
     if (!permissions.includes(permissionCode)) {
-      return next(new AppError('Insufficient permissions', 403));
+      return next(new AppError('Insufficient permissions', 403, 'FORBIDDEN_PERMISSION'));
     }
     next();
   };

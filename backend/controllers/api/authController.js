@@ -1,9 +1,20 @@
 const bcrypt = require('bcryptjs');
 const User = require('../../models/User');
+const Role = require('../../models/Role');
 const PasswordResetOtp = require('../../models/PasswordResetOtp');
 const { signToken } = require('../../utils/jwt');
 const AppError = require('../../utils/AppError');
 const { sendPasswordResetOtpEmail } = require('../../utils/mailer');
+
+async function loadPermissionCodes(roleId) {
+  if (!roleId) return [];
+  try {
+    const rows = await Role.getPermissions(roleId);
+    return (rows || []).map((r) => r.code).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
 
 function generateSixDigitOtp() {
   return String(Math.floor(100000 + Math.random() * 900000));
@@ -23,10 +34,10 @@ async function register(req, res, next) {
     const { first_name, last_name, email, password, dob, phone, phone_country_code } = req.body;
 
     const roleId = await User.getRoleIdByName('user');
-    if (!roleId) return next(new AppError('User role not found', 500));
+    if (!roleId) return next(new AppError('User role not found', 500, 'SERVER_CONFIG'));
 
     const exists = await User.existsByEmail(email);
-    if (exists) return next(new AppError('Email already registered', 409));
+    if (exists) return next(new AppError('Email already registered', 409, 'EMAIL_EXISTS'));
 
     const passwordHash = await bcrypt.hash(password, 10);
     const userId = await User.create({
@@ -41,7 +52,7 @@ async function register(req, res, next) {
     });
 
     const user = await User.findById(userId);
-    if (!user) return next(new AppError('User not found after create', 500));
+    if (!user) return next(new AppError('User not found after create', 500, 'INTERNAL_ERROR'));
 
     res.status(201).json({ success: true, user, message: 'Registration successful. Please log in.' });
   } catch (err) {
@@ -51,29 +62,47 @@ async function register(req, res, next) {
 
 async function login(req, res, next) {
   try {
-    const { email, password, loginAs } = req.body;
+    const { email, password, loginAs, rememberMe } = req.body;
+    const remember = rememberMe === true || rememberMe === 'true';
 
     const user = await User.findByEmail(email, { includePassword: true });
-    if (!user) return next(new AppError('Invalid email or password', 401));
-    if (!user.is_active) return next(new AppError('Account is deactivated', 403));
+    if (!user) return next(new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS'));
+    if (!user.is_active) return next(new AppError('Account is deactivated', 403, 'ACCOUNT_INACTIVE'));
 
     const valid = await bcrypt.compare(password, user.password);
-    if (!valid) return next(new AppError('Invalid email or password', 401));
+    if (!valid) return next(new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS'));
 
     if (loginAs && user.role !== loginAs) {
-      return next(new AppError(`This account is not a ${loginAs}. Please use the correct login.`, 403));
+      return next(
+        new AppError(
+          `This account is not a ${loginAs}. Please use the correct login.`,
+          403,
+          'FORBIDDEN_ROLE',
+        ),
+      );
     }
 
-    const { password: _, ...userWithoutPassword } = user;
-    const token = signToken({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      role_id: user.role_id,
-      is_active: user.is_active,
-    });
+    const permissions = await loadPermissionCodes(user.role_id);
 
-    res.json({ success: true, user: userWithoutPassword, token });
+    const { password: _omit, ...userWithoutPassword } = user;
+    const token = signToken(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        role_id: user.role_id,
+        is_active: user.is_active,
+      },
+      { rememberMe: remember },
+    );
+
+    res.json({
+      success: true,
+      user: userWithoutPassword,
+      token,
+      permissions,
+      remember_me: remember,
+    });
   } catch (err) {
     next(err);
   }
@@ -82,8 +111,9 @@ async function login(req, res, next) {
 async function me(req, res, next) {
   try {
     const user = await User.findById(req.user.id);
-    if (!user) return next(new AppError('User not found', 404));
-    res.json({ success: true, user });
+    if (!user) return next(new AppError('User not found', 404, 'NOT_FOUND'));
+    const permissions = await loadPermissionCodes(user.role_id);
+    res.json({ success: true, user, permissions });
   } catch (err) {
     next(err);
   }
