@@ -319,7 +319,10 @@ class _DayRow extends StatelessWidget {
         ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        // In a sliver list item, vertical constraints are unbounded. Using
+        // stretch here can force an invalid layout pass and cause
+        // "RenderBox was not laid out" exceptions.
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 72,

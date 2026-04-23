@@ -298,9 +298,76 @@ class ApiService {
     }
   }
 
-  Future<void> sendMessage(int sessionId, String message) async {
+  Future<void> sendMessage(
+    int sessionId, {
+    String? message,
+    String? attachmentPath,
+    String? attachmentName,
+  }) async {
     try {
-      await dio.post('/api/user/chats/$sessionId/messages', data: {'message': message});
+      final text = (message ?? '').trim();
+      if (text.isEmpty && (attachmentPath == null || attachmentPath.isEmpty)) {
+        throw Exception('message or attachment is required');
+      }
+
+      final form = FormData();
+      if (text.isNotEmpty) {
+        form.fields.add(MapEntry('message', text));
+      }
+      if (attachmentPath != null && attachmentPath.isNotEmpty) {
+        form.files.add(
+          MapEntry(
+            'attachment',
+            await MultipartFile.fromFile(
+              attachmentPath,
+              filename: attachmentName,
+            ),
+          ),
+        );
+      }
+      await dio.post(
+        '/api/user/chats/$sessionId/messages',
+        data: form,
+        options: Options(contentType: 'multipart/form-data'),
+      );
+    } catch (e) {
+      throw Exception(_extractError(e));
+    }
+  }
+
+  // ---------- Notifications ----------
+
+  Future<Map<String, dynamic>> getNotifications({int page = 1, int limit = 20}) async {
+    try {
+      final res = await dio.get(
+        '/api/notifications',
+        queryParameters: {'page': page, 'limit': limit},
+      );
+      return Map<String, dynamic>.from(res.data as Map);
+    } catch (e) {
+      throw Exception(_extractError(e));
+    }
+  }
+
+  Future<int> markNotificationRead(int id) async {
+    try {
+      final res = await dio.post('/api/notifications/$id/read');
+      final body = Map<String, dynamic>.from(res.data as Map);
+      final unread = body['unreadCount'];
+      if (unread is int) return unread;
+      return int.tryParse('${unread ?? 0}') ?? 0;
+    } catch (e) {
+      throw Exception(_extractError(e));
+    }
+  }
+
+  Future<int> markAllNotificationsRead() async {
+    try {
+      final res = await dio.post('/api/notifications/read-all');
+      final body = Map<String, dynamic>.from(res.data as Map);
+      final unread = body['unreadCount'];
+      if (unread is int) return unread;
+      return int.tryParse('${unread ?? 0}') ?? 0;
     } catch (e) {
       throw Exception(_extractError(e));
     }

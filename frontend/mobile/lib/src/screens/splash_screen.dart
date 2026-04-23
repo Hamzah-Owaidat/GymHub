@@ -22,11 +22,7 @@ class _SplashScreenState extends State<SplashScreen> {
       _navigated = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          auth.isAuthenticated ? AppRouter.app : AppRouter.signIn,
-          (_) => false,
-        );
+        Navigator.pushNamedAndRemoveUntil(context, AppRouter.app, (_) => false);
       });
     }
   }
