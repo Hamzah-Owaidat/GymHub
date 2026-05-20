@@ -57,7 +57,7 @@ async function create(req, res, next) {
     const startDate = `${yyyy}-${mm}-${dd}`;
     const endDate = addDays(startDate, plan.duration_days);
 
-    const subscriptionId = await UserSubscription.create({
+    const { id: subscriptionId } = await UserSubscription.create({
       user_id: userId,
       gym_id: plan.gym_id,
       plan_id: plan.id,

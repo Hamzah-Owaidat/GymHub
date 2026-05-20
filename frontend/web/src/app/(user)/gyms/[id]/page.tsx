@@ -15,6 +15,7 @@ import { getUserCards, type SavedCard } from "@/lib/api/userCards";
 import { useToast } from "@/context/ToastContext";
 import { useAuthStore } from "@/store/authStore";
 import StarRating from "@/components/ui/StarRating";
+import GymEntryQrModal from "@/components/gym-entry/GymEntryQrModal";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
@@ -80,6 +81,7 @@ export default function GymDetailsPage() {
   const [coaches, setCoaches] = useState<any[]>([]);
   const [currentImg, setCurrentImg] = useState(0);
   const [activeSub, setActiveSub] = useState<any | null>(null);
+  const [showEntryQr, setShowEntryQr] = useState(false);
   const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
 
   // Subscribe state
@@ -1034,6 +1036,18 @@ export default function GymDetailsPage() {
                   <div className="mt-3 rounded-xl bg-emerald-50 p-4 dark:bg-emerald-950/30">
                     <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">You are subscribed!</p>
                     <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">Valid until {formatDisplayDate(activeSub.end_date)}. You can book sessions at no extra cost.</p>
+                    {activeSub.id && isAuthenticated && (
+                      <button
+                        type="button"
+                        onClick={() => setShowEntryQr(true)}
+                        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5zM13.5 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5z" />
+                        </svg>
+                        Show entry QR
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -1145,6 +1159,15 @@ export default function GymDetailsPage() {
             </aside>
           </div>
         </>
+      )}
+
+      {activeSub?.id && (
+        <GymEntryQrModal
+          subscriptionId={Number(activeSub.id)}
+          gymName={gym?.name}
+          open={showEntryQr}
+          onClose={() => setShowEntryQr(false)}
+        />
       )}
     </div>
   );

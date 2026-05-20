@@ -12,6 +12,7 @@ const coachController = require('../controllers/web/dashboard/coachController');
 const sessionController = require('../controllers/web/dashboard/sessionController');
 const paymentController = require('../controllers/web/dashboard/paymentController');
 const statsController = require('../controllers/web/dashboard/statsController');
+const gymEntryController = require('../controllers/web/dashboard/gymEntryController');
 
 const tmpUploadDir = path.join(__dirname, '..', 'public', 'storage', 'tmp');
 if (!fs.existsSync(tmpUploadDir)) {
@@ -93,6 +94,8 @@ router.get('/sessions/:id', ...shared, sessionController.getById);
 router.post('/sessions', ...shared, sessionController.create);
 router.put('/sessions/:id', ...shared, sessionController.update);
 router.delete('/sessions/:id', ...shared, sessionController.remove);
+
+router.post('/gym-entry/verify', ...shared, gymEntryController.verify);
 
 router.get('/payments', ...shared, paymentController.list);
 router.get('/payments/export', ...shared, paymentController.exportExcel);

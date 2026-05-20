@@ -66,6 +66,7 @@ const AppSidebar: React.FC = () => {
       { icon: <TableIcon />, name: "Subscription Plans", path: `${D}/subscription-plans` },
       { icon: <UserCircleIcon />, name: "Coaches", path: `${D}/coaches` },
       { icon: <CalenderIcon />, name: "Sessions", path: `${D}/sessions` },
+      { icon: <PlugInIcon />, name: "Gym Entry", path: `${D}/gym-entry` },
       { icon: <PieChartIcon />, name: "Payments", path: `${D}/payments` },
     );
 

@@ -7,6 +7,7 @@ import '../../routes/app_router.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/image_utils.dart';
+import '../../widgets/gym_entry_qr_sheet.dart';
 
 class GymDetailsScreen extends StatefulWidget {
   const GymDetailsScreen({super.key, required this.gymId});
@@ -167,6 +168,19 @@ class _GymDetailsScreenState extends State<GymDetailsScreen> {
       );
       if (mounted) _snack('Subscription created');
       await _load();
+      if (mounted) {
+        final subId = _activeSub?['id'];
+        if (subId != null) {
+          final id = subId is num ? subId.toInt() : int.tryParse(subId.toString());
+          if (id != null) {
+            await showGymEntryQrSheet(
+              context,
+              subscriptionId: id,
+              gymName: _gym?['name']?.toString(),
+            );
+          }
+        }
+      }
     } catch (e) {
       if (mounted) _snack(e.toString());
     } finally {
@@ -618,6 +632,23 @@ class _GymDetailsScreenState extends State<GymDetailsScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+          TextButton.icon(
+            onPressed: () {
+              final subId = _activeSub?['id'];
+              if (subId == null) return;
+              showGymEntryQrSheet(
+                context,
+                subscriptionId: (subId is num) ? subId.toInt() : int.parse(subId.toString()),
+                gymName: _gym?['name']?.toString(),
+              );
+            },
+            icon: const Icon(Icons.qr_code_2_rounded, size: 18),
+            label: const Text('Entry QR'),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFF10B981),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
             ),
           ),
         ],

@@ -231,6 +231,30 @@ class ApiService {
     }
   }
 
+  /// Returns { subscription_id, gym_name, plan_name, end_date, qr_payload }.
+  Future<Map<String, dynamic>> getSubscriptionEntryQr(int subscriptionId) async {
+    try {
+      final res = await dio.get('/api/user/subscriptions/$subscriptionId/entry-qr');
+      final data = res.data['data'];
+      if (data is! Map) throw Exception('Invalid entry QR response');
+      return Map<String, dynamic>.from(data);
+    } catch (e) {
+      throw Exception(_extractError(e));
+    }
+  }
+
+  /// Staff: verify scanned QR at gym entrance.
+  Future<Map<String, dynamic>> verifyGymEntryQr(String code) async {
+    try {
+      final res = await dio.post('/api/dashboard/gym-entry/verify', data: {
+        'code': code,
+      });
+      return Map<String, dynamic>.from(res.data as Map);
+    } catch (e) {
+      throw Exception(_extractError(e));
+    }
+  }
+
   // ---------- Cards ----------
 
   Future<List<dynamic>> getCards() async {

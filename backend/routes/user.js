@@ -5,6 +5,7 @@ const multer = require('multer');
 const { requireAuth, optionalAuth } = require('../middleware');
 const gymController = require('../controllers/web/user/gymController');
 const subscriptionController = require('../controllers/web/user/subscriptionController');
+const gymEntryController = require('../controllers/web/user/gymEntryController');
 const userSessionController = require('../controllers/web/user/sessionController');
 const contactController = require('../controllers/web/user/contactController');
 const ratingController = require('../controllers/web/user/ratingController');
@@ -49,6 +50,7 @@ router.use(requireAuth);
 
 router.get('/subscriptions', subscriptionController.list);
 router.post('/subscriptions', subscriptionController.create);
+router.get('/subscriptions/:id/entry-qr', gymEntryController.getEntryQr);
 
 router.get('/sessions', userSessionController.list);
 router.get('/coaches/:coachId/availability', userSessionController.getCoachAvailability);
