@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { clearAiProfileStorage } from "@/lib/aiProfileStorage";
 
 export type AuthUser = {
   id: number;
@@ -132,6 +133,7 @@ export const useAuthStore = create<AuthState>()((set, get) => {
           s.removeItem(PERMS_KEY);
         });
         window.localStorage.removeItem(REMEMBER_KEY);
+        clearAiProfileStorage();
       }
       set({
         user: null,

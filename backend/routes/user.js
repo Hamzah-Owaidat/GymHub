@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { requireAuth, optionalAuth } = require('../middleware');
+const aiRateLimit = require('../middleware/aiRateLimit');
+const aiAssistantController = require('../controllers/web/user/aiAssistantController');
 const gymController = require('../controllers/web/user/gymController');
 const subscriptionController = require('../controllers/web/user/subscriptionController');
 const gymEntryController = require('../controllers/web/user/gymEntryController');
@@ -43,6 +45,8 @@ const chatUpload = multer({
 router.get('/gyms', optionalAuth, gymController.list);
 router.get('/gyms/:id', optionalAuth, gymController.getById);
 router.post('/contact', optionalAuth, contactController.create);
+
+router.post('/ai-assistant/chat', optionalAuth, aiRateLimit, aiAssistantController.chat);
 
 router.get('/gyms/:gymId/ratings', optionalAuth, ratingController.listForGym);
 

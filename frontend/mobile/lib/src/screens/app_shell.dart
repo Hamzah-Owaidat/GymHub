@@ -11,6 +11,7 @@ import 'gyms/gyms_screen.dart';
 import 'home/home_screen.dart';
 import 'profile/profile_screen.dart';
 import 'sessions/sessions_screen.dart';
+import '../widgets/ai_assistant_sheet.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -288,7 +289,22 @@ class _AppShellState extends State<AppShell> {
       ),
       body: SafeArea(
         top: false,
-        child: IndexedStack(index: _index, children: screens),
+        child: Stack(
+          children: [
+            IndexedStack(index: _index, children: screens),
+            Positioned(
+              right: 16,
+              bottom: 12,
+              child: FloatingActionButton(
+                heroTag: 'ai_assistant',
+                onPressed: () => showAiAssistantSheet(context),
+                backgroundColor: AppTheme.brand,
+                elevation: 4,
+                child: const Icon(Icons.auto_awesome_rounded, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,

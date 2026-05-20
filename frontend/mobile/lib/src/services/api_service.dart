@@ -243,6 +243,24 @@ class ApiService {
     }
   }
 
+  /// AI fitness assistant chat (optional auth; rate-limited).
+  Future<Map<String, dynamic>> sendAiAssistantMessage({
+    required String message,
+    Map<String, dynamic>? profile,
+    List<Map<String, dynamic>>? history,
+  }) async {
+    try {
+      final res = await dio.post('/api/user/ai-assistant/chat', data: {
+        'message': message,
+        if (profile != null) 'profile': profile,
+        if (history != null) 'history': history,
+      });
+      return Map<String, dynamic>.from(res.data as Map);
+    } catch (e) {
+      throw Exception(_extractError(e));
+    }
+  }
+
   /// Staff: verify scanned QR at gym entrance.
   Future<Map<String, dynamic>> verifyGymEntryQr(String code) async {
     try {

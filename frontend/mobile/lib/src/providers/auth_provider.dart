@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import '../utils/ai_profile_session.dart';
 
 class AuthProvider extends ChangeNotifier {
   AuthProvider() {
@@ -80,6 +81,7 @@ class AuthProvider extends ChangeNotifier {
     isAuthenticated = false;
     user = null;
     permissions = const [];
+    _clearSessionCaches();
     notifyListeners();
   }
 
@@ -89,6 +91,11 @@ class AuthProvider extends ChangeNotifier {
     isAuthenticated = false;
     user = null;
     permissions = const [];
+    _clearSessionCaches();
     notifyListeners();
+  }
+
+  void _clearSessionCaches() {
+    AiProfileSession.clear();
   }
 }

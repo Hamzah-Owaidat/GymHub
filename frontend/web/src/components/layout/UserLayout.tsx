@@ -2,6 +2,7 @@
 
 import UserNavbar from "./UserNavbar";
 import UserFooter from "./UserFooter";
+import AiAssistantWidget from "@/components/ai-assistant/AiAssistantWidget";
 
 export default function UserLayout({
   children,
@@ -15,6 +16,7 @@ export default function UserLayout({
         <div className="flex-1">{children}</div>
         <UserFooter />
       </main>
+      <AiAssistantWidget />
     </div>
   );
 }
