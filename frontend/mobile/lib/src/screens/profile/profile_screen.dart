@@ -6,11 +6,14 @@ import '../../providers/auth_provider.dart';
 import '../../routes/app_router.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/api_errors.dart';
 import '../../widgets/glow_background.dart';
 import '../../widgets/section_header.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({super.key, this.isActive = false});
+
+  final bool isActive;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -19,7 +22,8 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _api = ApiService.instance;
 
-  bool _loading = true;
+  bool _loading = false;
+  bool _loadedWhileAuthed = false;
   bool _saving = false;
   List<Map<String, dynamic>> _cards = [];
 
@@ -31,7 +35,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _loadCards();
+    _syncWithAuth();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      _syncWithAuth();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncWithAuth();
+  }
+
+  void _syncWithAuth() {
+    final auth = context.read<AuthProvider>();
+    if (!widget.isActive) return;
+
+    if (!auth.isAuthenticated) {
+      _loadedWhileAuthed = false;
+      if (mounted && (_loading || _cards.isNotEmpty)) {
+        setState(() {
+          _loading = false;
+          _cards = [];
+        });
+      }
+      return;
+    }
+
+    if (!_loadedWhileAuthed) {
+      _loadedWhileAuthed = true;
+      _loadCards();
+    }
   }
 
   @override
@@ -44,7 +83,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadCards() async {
-    if (!mounted) return;
+    if (!mounted || !widget.isActive) return;
+    final auth = context.read<AuthProvider>();
+    if (!auth.isAuthenticated) {
+      setState(() {
+        _loading = false;
+        _cards = [];
+      });
+      return;
+    }
+
     setState(() => _loading = true);
     try {
       final data = await _api.getCards();
@@ -53,7 +101,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .map((m) => Map<String, dynamic>.from(m))
           .toList(growable: false);
     } catch (e) {
-      if (mounted) _snack(e.toString());
+      if (mounted) _snack(formatApiError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -92,7 +140,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await _loadCards();
       if (mounted) _snack('Card saved');
     } catch (e) {
-      if (mounted) _snack(e.toString());
+      if (mounted) _snack(formatApiError(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -319,6 +367,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     label: 'Logout',
                     accent: const Color(0xFFEF4444),
                     onTap: () async {
+                      setState(() {
+                        _loadedWhileAuthed = false;
+                        _cards = [];
+                        _loading = false;
+                      });
                       await context.read<AuthProvider>().logout();
                       if (!context.mounted) return;
                       Navigator.pushNamedAndRemoveUntil(

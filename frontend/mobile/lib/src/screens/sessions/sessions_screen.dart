@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/api_errors.dart';
 import '../../widgets/section_header.dart';
 
 class SessionsScreen extends StatefulWidget {
-  const SessionsScreen({super.key});
+  const SessionsScreen({super.key, this.isActive = false});
+
+  /// IndexedStack keeps this mounted off-tab; skip API until tab is visible.
+  final bool isActive;
 
   @override
   State<SessionsScreen> createState() => _SessionsScreenState();
@@ -14,7 +20,8 @@ class SessionsScreen extends StatefulWidget {
 class _SessionsScreenState extends State<SessionsScreen> {
   final _api = ApiService.instance;
 
-  bool _loading = true;
+  bool _loading = false;
+  bool _loadedWhileAuthed = false;
   List<Map<String, dynamic>> _sessions = [];
   DateTime _weekStart = _mondayOf(DateTime.now());
   String _statusFilter = '';
@@ -22,11 +29,55 @@ class _SessionsScreenState extends State<SessionsScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _syncWithAuth();
+  }
+
+  @override
+  void didUpdateWidget(covariant SessionsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      _syncWithAuth();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncWithAuth();
+  }
+
+  void _syncWithAuth() {
+    final auth = context.read<AuthProvider>();
+    if (!widget.isActive) return;
+
+    if (!auth.isAuthenticated) {
+      _loadedWhileAuthed = false;
+      if (mounted && (_loading || _sessions.isNotEmpty)) {
+        setState(() {
+          _loading = false;
+          _sessions = [];
+        });
+      }
+      return;
+    }
+
+    if (!_loadedWhileAuthed) {
+      _loadedWhileAuthed = true;
+      _load();
+    }
   }
 
   Future<void> _load() async {
-    if (!mounted) return;
+    if (!mounted || !widget.isActive) return;
+    final auth = context.read<AuthProvider>();
+    if (!auth.isAuthenticated) {
+      setState(() {
+        _loading = false;
+        _sessions = [];
+      });
+      return;
+    }
+
     setState(() => _loading = true);
     try {
       final data = await _api.getSessions();
@@ -37,7 +88,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
+        SnackBar(content: Text(formatApiError(e))),
       );
     } finally {
       if (mounted) setState(() => _loading = false);

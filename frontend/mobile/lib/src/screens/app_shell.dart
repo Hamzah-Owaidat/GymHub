@@ -230,9 +230,9 @@ class _AppShellState extends State<AppShell> {
     final screens = <Widget>[
       HomeScreen(onOpenTab: _setTab),
       const GymsScreen(),
-      const SessionsScreen(),
-      const ChatScreen(),
-      const ProfileScreen(),
+      SessionsScreen(isActive: _index == 2),
+      ChatScreen(isActive: _index == 3),
+      ProfileScreen(isActive: _index == 4),
     ];
 
     return Scaffold(

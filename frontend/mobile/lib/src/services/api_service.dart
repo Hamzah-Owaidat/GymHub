@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import '../utils/api_errors.dart';
 import 'storage_service.dart';
 
 typedef UnauthorizedHandler = Future<void> Function();
@@ -47,14 +48,7 @@ class ApiService {
       ),
     );
 
-  String _extractError(Object e) {
-    if (e is DioException) {
-      final data = e.response?.data;
-      if (data is Map && data['error'] is String) return data['error'] as String;
-      return e.message ?? 'Network error';
-    }
-    return 'Unexpected error';
-  }
+  String _extractError(Object e) => formatApiError(e);
 
   // ---------- Auth ----------
 

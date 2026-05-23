@@ -9,9 +9,13 @@ import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
+import '../../utils/api_errors.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  const ChatScreen({super.key, this.isActive = false});
+
+  /// When false, skip polling and avoid error toasts (IndexedStack keeps this mounted).
+  final bool isActive;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -37,42 +41,77 @@ class _ChatScreenState extends State<ChatScreen> {
   List<dynamic> _conversations = [];
   List<dynamic> _messages = [];
   int? _activeSessionId;
+  DateTime? _lastErrorSnackAt;
 
   @override
   void initState() {
     super.initState();
-    _loadConversations();
-    _startPolling();
+    if (widget.isActive) _onBecameActive();
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      _onBecameActive();
+    } else if (!widget.isActive && oldWidget.isActive) {
+      _stopPolling();
+    }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (widget.isActive) _ensureRealtimeSubscription();
+  }
+
+  void _onBecameActive() {
+    if (!mounted) return;
+    final auth = context.read<AuthProvider>();
+    if (!auth.isAuthenticated) {
+      setState(() {
+        _loading = false;
+        _conversations = [];
+      });
+      return;
+    }
+    _loadConversations();
+    _startPolling();
     _ensureRealtimeSubscription();
   }
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    _stopPolling();
     _msg.dispose();
     _disposeRealtime();
     super.dispose();
   }
 
-  Future<void> _loadConversations({bool showLoader = true}) async {
+  Future<void> _loadConversations({
+    bool showLoader = true,
+    bool showError = true,
+  }) async {
+    if (!widget.isActive) return;
     if (showLoader) {
       setState(() => _loading = true);
     }
     try {
       _conversations = await _api.getChats();
     } catch (e) {
-      if (mounted) _snack(e.toString());
+      if (mounted && showError && widget.isActive) {
+        _snackThrottled(e);
+      }
     } finally {
       if (mounted && showLoader) setState(() => _loading = false);
     }
   }
 
-  Future<void> _openConversation(int sessionId, {bool clearFirst = true}) async {
+  Future<void> _openConversation(
+    int sessionId, {
+    bool clearFirst = true,
+    bool showError = true,
+  }) async {
     if (clearFirst) {
       setState(() {
         _activeSessionId = sessionId;
@@ -85,7 +124,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _messages = await _api.getMessages(sessionId);
       if (mounted) setState(() {});
     } catch (e) {
-      if (mounted) _snack(e.toString());
+      if (mounted && showError && widget.isActive) _snackThrottled(e);
     }
   }
 
@@ -108,7 +147,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _emojiOpen = false;
       await _openConversation(_activeSessionId!);
     } catch (e) {
-      if (mounted) _snack(e.toString());
+      if (mounted) _snackThrottled(e, force: true);
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -130,14 +169,24 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _startPolling() {
+    if (!widget.isActive) return;
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      if (!mounted || _loading) return;
-      await _loadConversations(showLoader: false);
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
+      if (!mounted || !widget.isActive || _loading) return;
+      await _loadConversations(showLoader: false, showError: false);
       if (_activeSessionId != null) {
-        await _openConversation(_activeSessionId!, clearFirst: false);
+        await _openConversation(
+          _activeSessionId!,
+          clearFirst: false,
+          showError: false,
+        );
       }
     });
+  }
+
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
   }
 
   Future<void> _ensureRealtimeSubscription() async {
@@ -198,6 +247,17 @@ class _ChatScreenState extends State<ChatScreen> {
     if (sessionId != null && _activeSessionId != null && sessionId == _activeSessionId) {
       await _openConversation(_activeSessionId!, clearFirst: false);
     }
+  }
+
+  void _snackThrottled(Object e, {bool force = false}) {
+    final now = DateTime.now();
+    if (!force &&
+        _lastErrorSnackAt != null &&
+        now.difference(_lastErrorSnackAt!) < const Duration(seconds: 30)) {
+      return;
+    }
+    _lastErrorSnackAt = now;
+    _snack(formatApiError(e));
   }
 
   void _snack(String msg) {
