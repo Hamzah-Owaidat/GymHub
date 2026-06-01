@@ -1,8 +1,9 @@
 -- Allow half-star ratings (e.g. 3.5, 4.5) by changing INT to DECIMAL.
 -- Also change rating_average on gyms to DECIMAL(3,1) for better precision.
 
+-- MySQL uses DROP CHECK (not DROP CONSTRAINT IF EXISTS)
 ALTER TABLE ratings
-  DROP CONSTRAINT IF EXISTS chk_rating_range;
+  DROP CHECK chk_rating_range;
 
 ALTER TABLE ratings
   MODIFY COLUMN rating DECIMAL(2,1) NOT NULL;
