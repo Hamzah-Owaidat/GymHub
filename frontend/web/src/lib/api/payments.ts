@@ -41,6 +41,38 @@ export async function getPayments(params?: {
   return { ...rest, pagination: normalizePagination(pagination) } as PaymentListResponse;
 }
 
+export async function getPaymentLinkOptions(gym_id: number, user_id: number) {
+  const res = await apiClient.get<{
+    success: boolean;
+    subscriptions: PaymentSubscriptionOption[];
+    sessions: PaymentSessionOption[];
+  }>(`${BASE}/payments/link-options`, { params: { gym_id, user_id } });
+  return res.data;
+}
+
+export type PaymentSubscriptionOption = {
+  id: number;
+  user_id: number;
+  gym_id: number;
+  plan_id: number;
+  start_date: string;
+  end_date: string;
+  status: string;
+  plan_name: string;
+  plan_price: number;
+};
+
+export type PaymentSessionOption = {
+  id: number;
+  user_id: number;
+  gym_id: number;
+  session_date: string;
+  start_time: string;
+  end_time: string;
+  price: number | null;
+  status: string;
+};
+
 export async function getPaymentById(id: number) {
   const res = await apiClient.get<{ success: boolean; payment: Payment }>(`${BASE}/payments/${id}`);
   return res.data;

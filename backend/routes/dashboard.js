@@ -99,6 +99,7 @@ router.delete('/sessions/:id', ...shared, sessionController.remove);
 router.post('/gym-entry/verify', ...shared, gymEntryController.verify);
 
 router.get('/payments', ...shared, paymentController.list);
+router.get('/payments/link-options', ...shared, paymentController.listLinkOptions);
 router.get('/payments/export', ...shared, paymentController.exportExcel);
 router.get('/payments/:id', ...shared, paymentController.getById);
 router.post('/payments', ...shared, paymentController.create);

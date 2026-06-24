@@ -98,6 +98,29 @@ async function listActiveSubscribersByGymIds(gymIds) {
   return rows;
 }
 
+async function listByGymAndUser(gymId, userId) {
+  const [rows] = await pool.query(
+    `
+      SELECT
+        us.id,
+        us.user_id,
+        us.gym_id,
+        us.plan_id,
+        DATE_FORMAT(us.start_date, '%Y-%m-%d') AS start_date,
+        DATE_FORMAT(us.end_date, '%Y-%m-%d') AS end_date,
+        us.status,
+        p.name AS plan_name,
+        p.price AS plan_price
+      FROM user_subscriptions us
+      JOIN subscription_plans p ON p.id = us.plan_id AND p.deleted_at IS NULL
+      WHERE us.gym_id = ? AND us.user_id = ? AND us.deleted_at IS NULL
+      ORDER BY us.created_at DESC
+    `,
+    [gymId, userId],
+  );
+  return rows;
+}
+
 async function findByIdForUser(id, userId) {
   const [rows] = await pool.query(
     `
@@ -189,6 +212,7 @@ module.exports = {
   activeForGym,
   listActiveSubscribersByGym,
   listActiveSubscribersByGymIds,
+  listByGymAndUser,
   findByIdForUser,
   findByQrToken,
   ensureQrToken,

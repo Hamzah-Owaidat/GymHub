@@ -15,12 +15,18 @@ import {
   exportPayments,
   getGyms,
   getUsers,
+  getSessionSubscribedUsers,
+  getPaymentLinkOptions,
   type Payment,
   type Gym,
   type User,
+  type PaymentSubscriptionOption,
+  type PaymentSessionOption,
 } from "@/lib/api/dashboard";
 import { useAuthStore } from "@/store/authStore";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+
+type GymSubscriber = User & { gym_id?: number };
 
 type PaymentModalMode = "view" | "create" | "edit" | null;
 
@@ -56,6 +62,7 @@ const formatMethod = (m: string | null) =>
     : "N/A";
 
 export default function PaymentsPage() {
+  const userRole = useAuthStore((s) => s.user?.role);
   const [data, setData] = useState<Payment[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 5, total: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
@@ -73,8 +80,28 @@ export default function PaymentsPage() {
   const [gymsLoaded, setGymsLoaded] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [usersLoaded, setUsersLoaded] = useState(false);
+  const [allGymSubscribers, setAllGymSubscribers] = useState<GymSubscriber[]>([]);
+  const [gymUsersLoading, setGymUsersLoading] = useState(false);
+  const [subscriptionOptions, setSubscriptionOptions] = useState<PaymentSubscriptionOption[]>([]);
+  const [sessionOptions, setSessionOptions] = useState<PaymentSessionOption[]>([]);
+  const [linkOptionsLoading, setLinkOptionsLoading] = useState(false);
 
   const { error: showError, success: showSuccess } = useToast();
+
+  const [form, setForm] = useState(emptyForm);
+  const selectedGymId = form.gym_id ? Number(form.gym_id) : null;
+  const gymUsers = useMemo(() => {
+    if (!selectedGymId) return [];
+    return allGymSubscribers.filter((user) => user.gym_id === selectedGymId);
+  }, [allGymSubscribers, selectedGymId]);
+  const subscriberCountByGym = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const user of allGymSubscribers) {
+      if (!user.gym_id) continue;
+      counts.set(user.gym_id, (counts.get(user.gym_id) || 0) + 1);
+    }
+    return counts;
+  }, [allGymSubscribers]);
 
   const loadGyms = async () => {
     if (gymsLoaded) return;
@@ -89,14 +116,30 @@ export default function PaymentsPage() {
 
   const loadUsers = async () => {
     if (usersLoaded) return;
-    const role = useAuthStore.getState().user?.role;
-    if (role !== "admin") { setUsersLoaded(true); return; }
+    if (userRole !== "admin") {
+      setUsersLoaded(true);
+      return;
+    }
     try {
       const res = await getUsers({ page: 1, limit: 1000, is_active: true });
       setUsers(res.data);
       setUsersLoaded(true);
     } catch (e: unknown) {
       showError(e instanceof Error ? e.message : "Failed to load users");
+    }
+  };
+
+  const loadOwnerSubscribers = async () => {
+    if (userRole !== "owner") return;
+    setGymUsersLoading(true);
+    try {
+      const res = await getSessionSubscribedUsers();
+      setAllGymSubscribers(res.data || []);
+    } catch (e: unknown) {
+      showError(e instanceof Error ? e.message : "Failed to load gym members");
+      setAllGymSubscribers([]);
+    } finally {
+      setGymUsersLoading(false);
     }
   };
 
@@ -142,19 +185,87 @@ export default function PaymentsPage() {
   useEffect(() => {
     loadGyms();
     loadUsers();
-  }, []);
+  }, [userRole]);
 
-  const [form, setForm] = useState(emptyForm);
+  useEffect(() => {
+    if (!modalMode || modalMode === "view") return;
+    if (!form.user_id || !form.gym_id) {
+      setSubscriptionOptions([]);
+      setSessionOptions([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLinkOptionsLoading(true);
+    getPaymentLinkOptions(Number(form.gym_id), Number(form.user_id))
+      .then((res) => {
+        if (!cancelled) {
+          setSubscriptionOptions(res.subscriptions || []);
+          setSessionOptions(res.sessions || []);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          showError(e instanceof Error ? e.message : "Failed to load subscriptions and sessions");
+          setSubscriptionOptions([]);
+          setSessionOptions([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLinkOptionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [form.user_id, form.gym_id, modalMode]);
 
   const resetForm = () => setForm({ ...emptyForm });
 
-  const openCreateModal = () => {
+  const setGymAndResetUser = (gymId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      gym_id: gymId,
+      user_id: prev.gym_id !== gymId ? "" : prev.user_id,
+      subscription_id: "",
+      session_id: "",
+    }));
+  };
+
+  const setUserAndClearLinks = (userId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      user_id: userId,
+      subscription_id: "",
+      session_id: "",
+    }));
+  };
+
+  const setGymAndClearLinks = (gymId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      gym_id: gymId,
+      subscription_id: "",
+      session_id: "",
+    }));
+  };
+
+  const selectClassName =
+    "h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100";
+
+  const openCreateModal = async () => {
     resetForm();
     setSelectedPayment(null);
     setModalMode("create");
+    if (userRole === "owner") {
+      await loadOwnerSubscribers();
+      if (gyms.length === 1) {
+        setGymAndResetUser(String(gyms[0].id));
+      }
+    }
   };
 
-  const openEditModal = (payment: Payment) => {
+  const openEditModal = async (payment: Payment) => {
     setSelectedPayment(payment);
     setForm({
       user_id: String(payment.user_id),
@@ -166,6 +277,9 @@ export default function PaymentsPage() {
       session_id: payment.session_id != null ? String(payment.session_id) : "",
     });
     setModalMode("edit");
+    if (userRole === "owner") {
+      await loadOwnerSubscribers();
+    }
   };
 
   const openViewModal = (payment: Payment) => {
@@ -551,36 +665,90 @@ export default function PaymentsPage() {
           ) : (
             <form className="mt-6 space-y-6 px-1" onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <Label>User</Label>
-                  <select
-                    value={form.user_id}
-                    onChange={(e) => setForm((f) => ({ ...f, user_id: e.target.value }))}
-                    className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
-                  >
-                    <option value="">Select user</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.first_name} {u.last_name} ({u.email})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <Label>Gym</Label>
-                  <select
-                    value={form.gym_id}
-                    onChange={(e) => setForm((f) => ({ ...f, gym_id: e.target.value }))}
-                    className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
-                  >
-                    <option value="">Select gym</option>
-                    {gyms.map((gym) => (
-                      <option key={gym.id} value={gym.id}>
-                        {gym.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {userRole === "owner" ? (
+                  <>
+                    <div>
+                      <Label>Gym</Label>
+                      <select
+                        value={form.gym_id}
+                        onChange={(e) => setGymAndResetUser(e.target.value)}
+                        className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                      >
+                        <option value="">Select gym</option>
+                        {gyms.map((gym) => {
+                          const count = subscriberCountByGym.get(gym.id) || 0;
+                          return (
+                            <option key={gym.id} value={gym.id}>
+                              {gym.name} ({count} subscriber{count === 1 ? "" : "s"})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                    <div>
+                      <Label>User</Label>
+                      <select
+                        value={form.user_id}
+                        onChange={(e) => setUserAndClearLinks(e.target.value)}
+                        disabled={!form.gym_id || gymUsersLoading}
+                        className={selectClassName}
+                      >
+                        <option value="">
+                          {!form.gym_id
+                            ? "Select gym first"
+                            : gymUsersLoading
+                              ? "Loading members..."
+                              : gymUsers.length === 0
+                                ? "No subscribed members"
+                                : "Select user"}
+                        </option>
+                        {gymUsers.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.first_name} {u.last_name} ({u.email})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+                        {form.gym_id && !gymUsersLoading && gymUsers.length === 0
+                          ? "No active subscribers at this gym. Pick the gym the member subscribed to."
+                          : "Only members with an active subscription at the selected gym are listed."}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <Label>User</Label>
+                      <select
+                        value={form.user_id}
+                        onChange={(e) => setUserAndClearLinks(e.target.value)}
+                        className={selectClassName}
+                      >
+                        <option value="">Select user</option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.first_name} {u.last_name} ({u.email})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <Label>Gym</Label>
+                      <select
+                        value={form.gym_id}
+                        onChange={(e) => setGymAndClearLinks(e.target.value)}
+                        className={selectClassName}
+                      >
+                        <option value="">Select gym</option>
+                        {gyms.map((gym) => (
+                          <option key={gym.id} value={gym.id}>
+                            {gym.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -630,24 +798,52 @@ export default function PaymentsPage() {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <Label>Subscription ID (optional)</Label>
-                  <Input
-                    type="number"
+                  <Label>Subscription (optional)</Label>
+                  <select
                     value={form.subscription_id}
                     onChange={(e) => setForm((f) => ({ ...f, subscription_id: e.target.value }))}
-                    placeholder="Leave blank if N/A"
-                    min={1}
-                  />
+                    disabled={!form.user_id || !form.gym_id || linkOptionsLoading}
+                    className={selectClassName}
+                  >
+                    <option value="">
+                      {!form.user_id || !form.gym_id
+                        ? "Select user and gym first"
+                        : linkOptionsLoading
+                          ? "Loading subscriptions..."
+                          : subscriptionOptions.length === 0
+                            ? "No subscriptions found"
+                            : "None"}
+                    </option>
+                    {subscriptionOptions.map((sub) => (
+                      <option key={sub.id} value={sub.id}>
+                        {sub.plan_name} — {sub.status} ({sub.start_date} to {sub.end_date})
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
-                  <Label>Session ID (optional)</Label>
-                  <Input
-                    type="number"
+                  <Label>Session (optional)</Label>
+                  <select
                     value={form.session_id}
                     onChange={(e) => setForm((f) => ({ ...f, session_id: e.target.value }))}
-                    placeholder="Leave blank if N/A"
-                    min={1}
-                  />
+                    disabled={!form.user_id || !form.gym_id || linkOptionsLoading}
+                    className={selectClassName}
+                  >
+                    <option value="">
+                      {!form.user_id || !form.gym_id
+                        ? "Select user and gym first"
+                        : linkOptionsLoading
+                          ? "Loading sessions..."
+                          : sessionOptions.length === 0
+                            ? "No sessions found"
+                            : "None"}
+                    </option>
+                    {sessionOptions.map((session) => (
+                      <option key={session.id} value={session.id}>
+                        {session.session_date} {session.start_time}-{session.end_time} — {session.status}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

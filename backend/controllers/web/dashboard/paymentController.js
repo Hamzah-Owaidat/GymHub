@@ -1,4 +1,6 @@
 const Payment = require('../../../models/Payment');
+const Session = require('../../../models/Session');
+const UserSubscription = require('../../../models/UserSubscription');
 const AppError = require('../../../utils/AppError');
 const ExcelJS = require('exceljs');
 const { isValidPaymentStatus } = require('../../../constants/paymentStatus');
@@ -24,6 +26,38 @@ async function list(req, res, next) {
     if (req.ownerGymIds) options.gym_ids = req.ownerGymIds;
     const result = await Payment.list(options);
     res.json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function listLinkOptions(req, res, next) {
+  try {
+    const gym_id = Number(req.query.gym_id);
+    const user_id = Number(req.query.user_id);
+    if (!gym_id || Number.isNaN(gym_id)) return next(new AppError('gym_id is required', 400));
+    if (!user_id || Number.isNaN(user_id)) return next(new AppError('user_id is required', 400));
+    if (req.ownerGymIds && !req.ownerGymIds.includes(gym_id)) {
+      return next(new AppError('You can only list options for your own gyms', 403));
+    }
+
+    const [subscriptions, sessionsResult] = await Promise.all([
+      UserSubscription.listByGymAndUser(gym_id, user_id),
+      Session.list({
+        gym_id,
+        user_id,
+        page: 1,
+        limit: 500,
+        sortBy: 'session_date',
+        sortDir: 'desc',
+      }),
+    ]);
+
+    res.json({
+      success: true,
+      subscriptions,
+      sessions: sessionsResult.data,
+    });
   } catch (err) {
     next(err);
   }
@@ -172,4 +206,4 @@ async function exportExcel(req, res, next) {
   }
 }
 
-module.exports = { list, getById, create, update, remove, exportExcel, PAYMENT_METHODS };
+module.exports = { list, listLinkOptions, getById, create, update, remove, exportExcel, PAYMENT_METHODS };
