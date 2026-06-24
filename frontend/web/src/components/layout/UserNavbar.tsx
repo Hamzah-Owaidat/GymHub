@@ -21,6 +21,12 @@ const NAV_STAFF = [
   { href: "/dashboard", label: "Dashboard" },
 ];
 
+const NAV_COACH = [
+  { href: "/", label: "Home" },
+  { href: "/dashboard/coach", label: "Dashboard" },
+  { href: "/dashboard/coach/chat", label: "Chat" },
+];
+
 const STAFF_ROLES = ["admin", "owner", "coach"];
 
 export default function UserNavbar() {
@@ -36,11 +42,11 @@ export default function UserNavbar() {
   const isStaff =
     effectiveUserRole && STAFF_ROLES.includes(effectiveUserRole);
   const navLinks =
-    isStaff && effectiveUserRole === "coach"
-      ? [...NAV_STAFF, { href: "/dashboard/coach/chat", label: "Chat" }]
+    effectiveUserRole === "coach"
+      ? NAV_COACH
       : isStaff
-      ? NAV_STAFF
-      : NAV_MEMBER;
+        ? NAV_STAFF
+        : NAV_MEMBER;
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
