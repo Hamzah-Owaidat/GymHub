@@ -56,6 +56,48 @@ async function activeForGym(userId, gymId) {
   return rows[0] || null;
 }
 
+async function listActiveSubscribersByGym(gymId) {
+  const [rows] = await pool.query(
+    `
+      SELECT DISTINCT u.id, u.first_name, u.last_name, u.email, us.gym_id
+      FROM users u
+      JOIN user_subscriptions us ON us.user_id = u.id
+      WHERE us.gym_id = ?
+        AND us.status = 'active'
+        AND (us.start_date IS NULL OR us.start_date <= CURDATE())
+        AND (us.end_date IS NULL OR DATE(us.end_date) >= CURDATE())
+        AND us.deleted_at IS NULL
+        AND u.deleted_at IS NULL
+        AND u.is_active = 1
+      ORDER BY u.first_name, u.last_name
+    `,
+    [gymId],
+  );
+  return rows;
+}
+
+async function listActiveSubscribersByGymIds(gymIds) {
+  if (!Array.isArray(gymIds) || !gymIds.length) return [];
+  const placeholders = gymIds.map(() => '?').join(', ');
+  const [rows] = await pool.query(
+    `
+      SELECT DISTINCT u.id, u.first_name, u.last_name, u.email, us.gym_id
+      FROM users u
+      JOIN user_subscriptions us ON us.user_id = u.id
+      WHERE us.gym_id IN (${placeholders})
+        AND us.status = 'active'
+        AND (us.start_date IS NULL OR us.start_date <= CURDATE())
+        AND (us.end_date IS NULL OR DATE(us.end_date) >= CURDATE())
+        AND us.deleted_at IS NULL
+        AND u.deleted_at IS NULL
+        AND u.is_active = 1
+      ORDER BY us.gym_id, u.first_name, u.last_name
+    `,
+    gymIds,
+  );
+  return rows;
+}
+
 async function findByIdForUser(id, userId) {
   const [rows] = await pool.query(
     `
@@ -145,6 +187,8 @@ module.exports = {
   listByUser,
   create,
   activeForGym,
+  listActiveSubscribersByGym,
+  listActiveSubscribersByGymIds,
   findByIdForUser,
   findByQrToken,
   ensureQrToken,

@@ -16,14 +16,16 @@ import {
   getGyms,
   getCoaches,
   getUsers,
+  getSessionSubscribedUsers,
   type Session,
   type Gym,
   type Coach,
 } from "@/lib/api/dashboard";
 import { useAuthStore } from "@/store/authStore";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 type User = { id: number; first_name: string; last_name: string; email: string };
+type GymSubscriber = User & { gym_id?: number };
 type SessionModalMode = "view" | "create" | "edit" | null;
 
 const statusBadge: Record<string, string> = {
@@ -69,6 +71,8 @@ export default function SessionsPage() {
   const [coachesLoaded, setCoachesLoaded] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [usersLoaded, setUsersLoaded] = useState(false);
+  const [allGymSubscribers, setAllGymSubscribers] = useState<GymSubscriber[]>([]);
+  const [gymUsersLoading, setGymUsersLoading] = useState(false);
 
   const [form, setForm] = useState({ ...emptyForm });
 
@@ -77,6 +81,18 @@ export default function SessionsPage() {
   const filteredCoaches = selectedGymId
     ? coaches.filter((coach) => coach.gym_id === selectedGymId)
     : [];
+  const gymUsers = useMemo(() => {
+    if (!selectedGymId) return [];
+    return allGymSubscribers.filter((user) => user.gym_id === selectedGymId);
+  }, [allGymSubscribers, selectedGymId]);
+  const subscriberCountByGym = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const user of allGymSubscribers) {
+      if (!user.gym_id) continue;
+      counts.set(user.gym_id, (counts.get(user.gym_id) || 0) + 1);
+    }
+    return counts;
+  }, [allGymSubscribers]);
 
   const loadGyms = async () => {
     if (gymsLoaded) return;
@@ -112,6 +128,20 @@ export default function SessionsPage() {
       setUsersLoaded(true);
     } catch (e: unknown) {
       showError(e instanceof Error ? e.message : "Failed to load users");
+    }
+  };
+
+  const loadOwnerSubscribers = async () => {
+    if (userRole !== "owner") return;
+    setGymUsersLoading(true);
+    try {
+      const res = await getSessionSubscribedUsers();
+      setAllGymSubscribers(res.data || []);
+    } catch (e: unknown) {
+      showError(e instanceof Error ? e.message : "Failed to load gym members");
+      setAllGymSubscribers([]);
+    } finally {
+      setGymUsersLoading(false);
     }
   };
 
@@ -178,6 +208,7 @@ export default function SessionsPage() {
       return {
         ...prev,
         gym_id: gymId,
+        user_id: prev.gym_id !== gymId ? "" : prev.user_id,
         coach_id: coachStillValid ? prev.coach_id : "",
         price:
           prev.price ||
@@ -206,13 +237,19 @@ export default function SessionsPage() {
     });
   };
 
-  const openCreateModal = () => {
+  const openCreateModal = async () => {
     resetForm();
     setSelectedSession(null);
     setModalMode("create");
+    if (userRole === "owner") {
+      await loadOwnerSubscribers();
+      if (gyms.length === 1) {
+        setGymAndSyncCoach(String(gyms[0].id));
+      }
+    }
   };
 
-  const openEditModal = (session: Session) => {
+  const openEditModal = async (session: Session) => {
     setSelectedSession(session);
     const dateOnly = session.session_date
       ? session.session_date.slice(0, 10)
@@ -229,6 +266,9 @@ export default function SessionsPage() {
       is_private: session.is_private,
     });
     setModalMode("edit");
+    if (userRole === "owner") {
+      await loadOwnerSubscribers();
+    }
   };
 
   const openViewModal = (session: Session) => {
@@ -624,51 +664,105 @@ export default function SessionsPage() {
           ) : (
             <form className="mt-6 space-y-6 px-1" onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <Label>{userRole === "admin" ? "User" : "User ID"}</Label>
-                  {userRole === "admin" ? (
-                    <select
-                      value={form.user_id}
-                      onChange={(e) => setForm((f) => ({ ...f, user_id: e.target.value }))}
-                      className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
-                    >
-                      <option value="">Select user</option>
-                      {users.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.first_name} {u.last_name} ({u.email})
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <>
-                      <Input
-                        type="number"
+                {userRole === "owner" ? (
+                  <>
+                    <div>
+                      <Label>Gym</Label>
+                      <select
+                        value={form.gym_id}
+                        onChange={(e) => setGymAndSyncCoach(e.target.value)}
+                        className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                      >
+                        <option value="">Select gym</option>
+                        {gyms.map((gym) => {
+                          const count = subscriberCountByGym.get(gym.id) || 0;
+                          return (
+                            <option key={gym.id} value={gym.id}>
+                              {gym.name} ({count} subscriber{count === 1 ? "" : "s"})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                    <div>
+                      <Label>User</Label>
+                      <select
                         value={form.user_id}
                         onChange={(e) => setForm((f) => ({ ...f, user_id: e.target.value }))}
-                        placeholder="Enter customer user ID"
-                        min={1}
-                      />
+                        disabled={!form.gym_id || gymUsersLoading}
+                        className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                      >
+                        <option value="">
+                          {!form.gym_id
+                            ? "Select gym first"
+                            : gymUsersLoading
+                              ? "Loading members..."
+                              : gymUsers.length === 0
+                                ? "No subscribed members"
+                                : "Select user"}
+                        </option>
+                        {gymUsers.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.first_name} {u.last_name} ({u.email})
+                          </option>
+                        ))}
+                      </select>
                       <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
-                        Enter the booked user ID. The backend validates that this user exists and is active.
+                        {form.gym_id && !gymUsersLoading && gymUsers.length === 0
+                          ? "No active subscribers at this gym. Pick the gym the member subscribed to."
+                          : "Only members with an active subscription at the selected gym are listed."}
                       </p>
-                    </>
-                  )}
-                </div>
-                <div>
-                  <Label>Gym</Label>
-                  <select
-                    value={form.gym_id}
-                    onChange={(e) => setGymAndSyncCoach(e.target.value)}
-                    className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
-                  >
-                    <option value="">Select gym</option>
-                    {gyms.map((gym) => (
-                      <option key={gym.id} value={gym.id}>
-                        {gym.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <Label>{userRole === "admin" ? "User" : "User ID"}</Label>
+                      {userRole === "admin" ? (
+                        <select
+                          value={form.user_id}
+                          onChange={(e) => setForm((f) => ({ ...f, user_id: e.target.value }))}
+                          className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                        >
+                          <option value="">Select user</option>
+                          {users.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.first_name} {u.last_name} ({u.email})
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <>
+                          <Input
+                            type="number"
+                            value={form.user_id}
+                            onChange={(e) => setForm((f) => ({ ...f, user_id: e.target.value }))}
+                            placeholder="Enter customer user ID"
+                            min={1}
+                          />
+                          <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+                            Enter the booked user ID. The backend validates that this user exists and is active.
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    <div>
+                      <Label>Gym</Label>
+                      <select
+                        value={form.gym_id}
+                        onChange={(e) => setGymAndSyncCoach(e.target.value)}
+                        className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-700 shadow-theme-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                      >
+                        <option value="">Select gym</option>
+                        {gyms.map((gym) => (
+                          <option key={gym.id} value={gym.id}>
+                            {gym.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

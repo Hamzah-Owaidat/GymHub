@@ -69,7 +69,16 @@ export type CoachSessionUser = {
   first_name: string;
   last_name: string;
   email: string;
+  gym_id?: number;
 };
+
+export async function getSessionSubscribedUsers(gym_id?: number) {
+  const res = await apiClient.get<{ success: boolean; data: CoachSessionUser[] }>(
+    `${BASE}/sessions/subscribed-users`,
+    { params: gym_id ? { gym_id } : undefined },
+  );
+  return res.data;
+}
 
 export async function getMySessionUsers() {
   const res = await apiClient.get<{ success: boolean; data: CoachSessionUser[] }>(`${BASE}/coach/session-users`);

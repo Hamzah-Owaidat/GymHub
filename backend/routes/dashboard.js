@@ -89,6 +89,7 @@ router.put('/coaches/:id', ...shared, coachController.update);
 router.delete('/coaches/:id', ...shared, coachController.remove);
 
 router.get('/sessions', ...shared, sessionController.list);
+router.get('/sessions/subscribed-users', ...shared, sessionController.listSubscribedUsers);
 router.get('/sessions/export', ...shared, sessionController.exportExcel);
 router.get('/sessions/:id', ...shared, sessionController.getById);
 router.post('/sessions', ...shared, sessionController.create);

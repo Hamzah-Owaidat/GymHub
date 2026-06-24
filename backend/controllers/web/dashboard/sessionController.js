@@ -1,4 +1,5 @@
 const Session = require('../../../models/Session');
+const UserSubscription = require('../../../models/UserSubscription');
 const AppError = require('../../../utils/AppError');
 const ExcelJS = require('exceljs');
 const { isValidSessionStatus } = require('../../../constants/sessionStatus');
@@ -42,6 +43,35 @@ async function getById(req, res, next) {
   }
 }
 
+async function listSubscribedUsers(req, res, next) {
+  try {
+    const gym_id = req.query.gym_id ? Number(req.query.gym_id) : null;
+
+    if (req.ownerGymIds) {
+      const allowedGymIds = req.ownerGymIds;
+      if (gym_id) {
+        if (!allowedGymIds.includes(gym_id)) {
+          return next(new AppError('You can only list users for your own gyms', 403));
+        }
+        const data = await UserSubscription.listActiveSubscribersByGym(gym_id);
+        return res.json({ success: true, data });
+      }
+
+      const data = await UserSubscription.listActiveSubscribersByGymIds(allowedGymIds);
+      return res.json({ success: true, data });
+    }
+
+    if (!gym_id || Number.isNaN(gym_id)) {
+      return next(new AppError('gym_id is required', 400));
+    }
+
+    const data = await UserSubscription.listActiveSubscribersByGym(gym_id);
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function create(req, res, next) {
   try {
     const { user_id, gym_id, coach_id, session_date, start_time, end_time, price, status, is_private } = req.body || {};
@@ -66,6 +96,12 @@ async function create(req, res, next) {
 
     if (!(await Session.userExists(parsedUserId))) {
       return next(new AppError('Selected user does not exist or is inactive', 400));
+    }
+    if (req.ownerGymIds) {
+      const activeSub = await UserSubscription.activeForGym(parsedUserId, parsedGymId);
+      if (!activeSub) {
+        return next(new AppError('Selected user does not have an active subscription at this gym', 400));
+      }
     }
     if (!(await Session.gymExists(parsedGymId))) {
       return next(new AppError('Selected gym does not exist or is inactive', 400));
@@ -163,6 +199,12 @@ async function update(req, res, next) {
 
     if (!(await Session.userExists(effectiveUserId))) {
       return next(new AppError('Selected user does not exist or is inactive', 400));
+    }
+    if (req.ownerGymIds) {
+      const activeSub = await UserSubscription.activeForGym(effectiveUserId, effectiveGymId);
+      if (!activeSub) {
+        return next(new AppError('Selected user does not have an active subscription at this gym', 400));
+      }
     }
     if (!(await Session.gymExists(effectiveGymId))) {
       return next(new AppError('Selected gym does not exist or is inactive', 400));
@@ -266,4 +308,4 @@ async function exportExcel(req, res, next) {
   }
 }
 
-module.exports = { list, getById, create, update, remove, exportExcel };
+module.exports = { list, listSubscribedUsers, getById, create, update, remove, exportExcel };
